@@ -233,11 +233,11 @@ describe("install-hooks / uninstall-hooks", () => {
     const origCwd = process.cwd();
     process.chdir(tmpDir);
     try {
-      // Write settings with an existing non-stint hook (new format)
+      // Write settings with an existing non-stint hook
       writeFileSync(settingsPath, JSON.stringify({
         hooks: {
           PreToolUse: [
-            { matcher: { tools: ["Write"] }, hooks: [{ type: "command", command: "my-other-hook" }] },
+            { matcher: "Write", hooks: [{ type: "command", command: "my-other-hook" }] },
           ],
         },
       }, null, 2));

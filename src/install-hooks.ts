@@ -19,13 +19,12 @@ const HOOKS = {
   hooks: {
     PreToolUse: [
       {
-        matcher: { tools: ["Write", "Edit", "NotebookEdit"] },
+        matcher: "Write|Edit|NotebookEdit",
         hooks: [{ type: "command", command: "git-stint-hook-pre-tool" }],
       },
     ],
     Stop: [
       {
-        matcher: {},
         hooks: [{ type: "command", command: "git-stint-hook-stop" }],
       },
     ],
