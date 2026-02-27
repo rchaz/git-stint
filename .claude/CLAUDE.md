@@ -31,3 +31,15 @@ Always build before testing — tests import from `dist/`.
 3. New commands need tests in `test/unit/session.test.js`
 4. Git operations go through `src/git.ts` — don't call git directly
 5. Manifest changes must be backward compatible
+
+## Publishing
+
+After changes are committed and pushed to `main`, publish to npm:
+
+1. Bump the version in **both** `package.json` and `package-lock.json`
+2. Commit: `git commit -am "v0.X.Y"`
+3. Push: `git push origin main`
+4. Tag and push: `git tag v0.X.Y && git push origin v0.X.Y`
+
+The tag push triggers CI (tests on ubuntu + macos, Node 22 + 24) then publishes to npm.
+Use **patch** bumps for fixes, **minor** bumps for features.
