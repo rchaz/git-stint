@@ -1,0 +1,96 @@
+#!/usr/bin/env bash
+#
+# Claude Code PreToolUse hook for git-stint
+# Called before Write/Edit/NotebookEdit tool use.
+#
+# Reads tool input from stdin (JSON), extracts file_path, and tracks it.
+#
+# Behavior:
+#   - File is inside a .stint/ worktree: tracks the file, allows the write.
+#   - File is in main repo with active session: blocks the write and tells
+#     the agent to work in the worktree directory instead.
+#   - No session active: allows the write silently.
+#
+
+set -euo pipefail
+
+# Check that git-stint is available
+if ! command -v git-stint &>/dev/null; then
+  echo "Warning: git-stint is not in PATH. Hooks will not work." >&2
+  echo "Install with: npm install -g git-stint (or npm link from the repo)" >&2
+  exit 0
+fi
+
+# Read the tool input from stdin
+INPUT=$(cat)
+
+# Extract file_path using jq if available, fallback to grep/sed
+if command -v jq &>/dev/null; then
+  FILE_PATH=$(echo "$INPUT" | jq -r '.file_path // .notebook_path // empty' 2>/dev/null || true)
+else
+  FILE_PATH=$(echo "$INPUT" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+  if [ -z "$FILE_PATH" ]; then
+    FILE_PATH=$(echo "$INPUT" | grep -o '"notebook_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"notebook_path"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
+  fi
+fi
+
+# If no file path found, allow silently
+if [ -z "$FILE_PATH" ]; then
+  exit 0
+fi
+
+# Check if the file being edited is inside a stint worktree (check the file path, not pwd)
+# Match /.stint/<name>/ precisely — avoid false positives like /my.stint/ or /.stinted/
+if echo "$FILE_PATH" | grep -qE '/\.stint/[^/]+/'; then
+  # File is in a stint worktree — track and allow
+  git-stint track "$FILE_PATH" 2>/dev/null || true
+  exit 0
+fi
+
+# The file is NOT in a stint worktree. Check if any stint session exists.
+SESSIONS_DIR="$(git rev-parse --git-common-dir 2>/dev/null)/sessions"
+if [ -d "$SESSIONS_DIR" ]; then
+  # Iterate session manifests to find the best one to suggest.
+  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+  BEST_WORKTREE=""
+  BEST_SESSION=""
+
+  for manifest in "$SESSIONS_DIR"/*.json; do
+    [ -f "$manifest" ] || continue
+    # Skip .tmp files (glob won't match, but be safe)
+    case "$manifest" in *.tmp) continue ;; esac
+
+    if command -v jq &>/dev/null; then
+      wt=$(jq -r '.worktree // empty' "$manifest" 2>/dev/null || true)
+      sn=$(jq -r '.name // empty' "$manifest" 2>/dev/null || true)
+    else
+      wt=$(grep -o '"worktree"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" | head -1 | sed 's/.*"worktree"[[:space:]]*:[[:space:]]*"//;s/"$//')
+      sn=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" | head -1 | sed 's/.*"name"[[:space:]]*:[[:space:]]*"//;s/"$//')
+    fi
+
+    if [ -z "$BEST_WORKTREE" ] && [ -n "$wt" ]; then
+      BEST_WORKTREE="$wt"
+      BEST_SESSION="$sn"
+    fi
+  done
+
+  if [ -n "$BEST_WORKTREE" ]; then
+    # Active session exists but agent is writing to the main repo — block.
+    if [ -n "$REPO_ROOT" ]; then
+      ABS_WORKTREE="$REPO_ROOT/$BEST_WORKTREE"
+      echo "BLOCKED: You have an active stint session '${BEST_SESSION}'." >&2
+      echo "You must work in the session worktree, not the main repo." >&2
+      echo "Run: cd \"$ABS_WORKTREE\"" >&2
+      echo "Then retry your edit. The file you need is: $ABS_WORKTREE/${FILE_PATH#$REPO_ROOT/}" >&2
+    else
+      echo "BLOCKED: An active stint session exists. Work in the session worktree instead." >&2
+      echo "Run: git stint list" >&2
+    fi
+
+    # Exit non-zero to block the tool call
+    exit 1
+  fi
+fi
+
+# No session active — allow the write
+exit 0

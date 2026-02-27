@@ -1,0 +1,34 @@
+#!/usr/bin/env bash
+#
+# Claude Code Stop hook for git-stint
+# Called when a Claude Code session ends.
+#
+# Commits any pending changes as a WIP checkpoint.
+# The session persists — user can resume or finalize later.
+#
+
+set -euo pipefail
+
+# Check that git-stint is available
+if ! command -v git-stint &>/dev/null; then
+  echo "Warning: git-stint is not in PATH. Stop hook cannot commit pending changes." >&2
+  echo "Install with: npm install -g git-stint (or npm link from the repo)" >&2
+  exit 0
+fi
+
+# Commit pending work for all active sessions.
+# Uses --json to get session names, avoiding "multiple sessions" ambiguity error.
+SESSIONS_JSON=$(git-stint list --json 2>/dev/null || echo "[]")
+
+if command -v jq &>/dev/null; then
+  NAMES=$(echo "$SESSIONS_JSON" | jq -r '.[].name' 2>/dev/null || true)
+else
+  NAMES=$(echo "$SESSIONS_JSON" | grep -o '"name":"[^"]*"' | sed 's/"name":"//;s/"$//' || true)
+fi
+
+if [ -n "$NAMES" ]; then
+  echo "$NAMES" | while read -r name; do
+    [ -z "$name" ] && continue
+    git-stint commit -m "WIP: session checkpoint" --session "$name" 2>/dev/null || true
+  done
+fi

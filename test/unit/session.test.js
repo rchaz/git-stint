@@ -1,0 +1,550 @@
+import { describe, it, beforeEach, afterEach } from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { execFileSync } from "node:child_process";
+import { createTempRepo } from "../helpers/temp-repo.js";
+import {
+  start,
+  track,
+  status,
+  diff,
+  sessionCommit,
+  log,
+  squash,
+  merge,
+  undo,
+  end,
+  abort,
+  list,
+  listJson,
+  prune,
+} from "../../dist/session.js";
+import {
+  loadManifest,
+  listManifests,
+  getWorktreePath,
+} from "../../dist/manifest.js";
+import * as git from "../../dist/git.js";
+
+let repo;
+
+describe("session", () => {
+  beforeEach(() => {
+    repo = createTempRepo();
+  });
+  afterEach(() => {
+    repo.cleanup();
+  });
+
+  describe("start()", () => {
+    it("creates a branch, worktree, and manifest", () => {
+      start("my-feature");
+      const m = loadManifest("my-feature");
+      assert.ok(m, "manifest should exist");
+      assert.equal(m.name, "my-feature");
+      assert.equal(m.branch, "stint/my-feature");
+      assert.equal(m.worktree, ".stint/my-feature");
+      assert.ok(m.startedAt.length > 0, "startedAt should be set");
+      assert.equal(m.baseline, m.startedAt);
+      assert.deepStrictEqual(m.changesets, []);
+      assert.deepStrictEqual(m.pending, []);
+      assert.equal(m.version, 1);
+
+      // Branch should exist
+      assert.ok(git.branchExists("stint/my-feature"));
+
+      // Worktree should exist
+      const wtPath = getWorktreePath(m);
+      assert.ok(existsSync(wtPath));
+    });
+
+    it("generates a name when none provided", () => {
+      start();
+      const manifests = listManifests();
+      assert.equal(manifests.length, 1);
+      assert.ok(manifests[0].name.includes("-"), "generated name should be adjective-noun");
+    });
+
+    it("rejects invalid names", () => {
+      assert.throws(() => start("../evil"), /Invalid session name/);
+      assert.throws(() => start("; rm -rf /"), /Invalid session name/);
+      assert.throws(() => start("  "), /cannot be empty/);
+      assert.throws(() => start("-starts-with-dash"), /Invalid session name/);
+    });
+
+    it("rejects names with path traversal", () => {
+      assert.throws(() => start("foo..bar"), /cannot contain/);
+    });
+
+    it("appends suffix for duplicate names", () => {
+      start("dupe");
+      start("dupe");
+      const manifests = listManifests();
+      assert.equal(manifests.length, 2);
+      const names = manifests.map((m) => m.name).sort();
+      assert.deepStrictEqual(names, ["dupe", "dupe-2"]);
+    });
+
+    it("throws in non-git directory", () => {
+      const { cleanup: c } = createTempNonGitDir();
+      try {
+        assert.throws(() => start("test"), /Not inside a git repository/);
+      } finally {
+        c();
+      }
+    });
+
+    it("adds .stint/ to .git/info/exclude", () => {
+      start("excluded");
+      const commonDir = git.getGitCommonDir();
+      const excludePath = join(commonDir, "info", "exclude");
+      const content = readFileSync(excludePath, "utf-8");
+      assert.ok(content.includes(".stint/"));
+    });
+
+    it("rolls back branch on worktree failure", () => {
+      // Create a file where the worktree would go to cause a failure
+      const wtDir = join(repo.dir, ".stint", "blocker");
+      execFileSync("mkdir", ["-p", wtDir]);
+      writeFileSync(join(wtDir, "conflict"), "blocks worktree");
+      // git worktree add will fail because directory exists with content
+      // The branch should be cleaned up
+      const branchExistedBefore = git.branchExists("stint/blocker");
+      assert.equal(branchExistedBefore, false);
+      try {
+        start("blocker");
+      } catch {
+        // Expected failure — verify branch was rolled back
+        assert.equal(git.branchExists("stint/blocker"), false);
+      }
+    });
+  });
+
+  describe("track()", () => {
+    it("adds files to pending list", () => {
+      start("track-test");
+      const m = loadManifest("track-test");
+      const wt = getWorktreePath(m);
+      process.chdir(wt);
+
+      track(["src/foo.ts", "src/bar.ts"], "track-test");
+      const updated = loadManifest("track-test");
+      assert.deepStrictEqual(updated.pending, ["src/foo.ts", "src/bar.ts"]);
+    });
+
+    it("deduplicates files", () => {
+      start("dedup-test");
+      const m = loadManifest("dedup-test");
+      const wt = getWorktreePath(m);
+      process.chdir(wt);
+
+      track(["src/foo.ts"], "dedup-test");
+      track(["src/foo.ts", "src/bar.ts"], "dedup-test");
+      const updated = loadManifest("dedup-test");
+      assert.deepStrictEqual(updated.pending, ["src/foo.ts", "src/bar.ts"]);
+    });
+
+    it("handles absolute paths inside worktree", () => {
+      start("abs-test");
+      const m = loadManifest("abs-test");
+      const wt = getWorktreePath(m);
+      process.chdir(wt);
+
+      track([join(wt, "src/absolute.ts")], "abs-test");
+      const updated = loadManifest("abs-test");
+      assert.deepStrictEqual(updated.pending, ["src/absolute.ts"]);
+    });
+  });
+
+  describe("sessionCommit()", () => {
+    it("commits changes and advances baseline", () => {
+      start("commit-test");
+      const m = loadManifest("commit-test");
+      const wt = getWorktreePath(m);
+      const originalBaseline = m.baseline;
+
+      // Make a change in the worktree
+      writeFileSync(join(wt, "newfile.txt"), "hello world\n");
+
+      sessionCommit("Add newfile", "commit-test");
+
+      const updated = loadManifest("commit-test");
+      assert.notEqual(updated.baseline, originalBaseline);
+      assert.equal(updated.changesets.length, 1);
+      assert.equal(updated.changesets[0].id, 1);
+      assert.equal(updated.changesets[0].message, "Add newfile");
+      assert.ok(updated.changesets[0].files.includes("newfile.txt"));
+      assert.deepStrictEqual(updated.pending, []);
+    });
+
+    it("does nothing when there are no changes", () => {
+      start("no-changes");
+      // Capture console output
+      const logs = captureConsole(() => {
+        sessionCommit("Nothing here", "no-changes");
+      });
+      assert.ok(logs.some((l) => l.includes("Nothing to commit")));
+    });
+
+    it("records multiple changesets with incrementing IDs", () => {
+      start("multi-commit");
+      const m = loadManifest("multi-commit");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "file1.txt"), "first\n");
+      sessionCommit("First commit", "multi-commit");
+
+      writeFileSync(join(wt, "file2.txt"), "second\n");
+      sessionCommit("Second commit", "multi-commit");
+
+      const updated = loadManifest("multi-commit");
+      assert.equal(updated.changesets.length, 2);
+      assert.equal(updated.changesets[0].id, 1);
+      assert.equal(updated.changesets[1].id, 2);
+    });
+  });
+
+  describe("squash()", () => {
+    it("collapses all changesets into one", () => {
+      start("squash-test");
+      const m = loadManifest("squash-test");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "a.txt"), "aaa\n");
+      sessionCommit("Add a", "squash-test");
+
+      writeFileSync(join(wt, "b.txt"), "bbb\n");
+      sessionCommit("Add b", "squash-test");
+
+      squash("Combined work", "squash-test");
+
+      const updated = loadManifest("squash-test");
+      assert.equal(updated.changesets.length, 1);
+      assert.equal(updated.changesets[0].id, 1);
+      assert.equal(updated.changesets[0].message, "Combined work");
+      const files = updated.changesets[0].files.sort();
+      assert.ok(files.includes("a.txt"));
+      assert.ok(files.includes("b.txt"));
+    });
+
+    it("does nothing with zero changesets", () => {
+      start("empty-squash");
+      const logs = captureConsole(() => {
+        squash("Nothing", "empty-squash");
+      });
+      assert.ok(logs.some((l) => l.includes("Nothing to squash")));
+    });
+
+    it("rejects squash with uncommitted changes", () => {
+      start("dirty-squash");
+      const m = loadManifest("dirty-squash");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "a.txt"), "aaa\n");
+      sessionCommit("Add a", "dirty-squash");
+
+      writeFileSync(join(wt, "dirty.txt"), "not committed\n");
+      assert.throws(() => squash("Should fail", "dirty-squash"), /Uncommitted changes/);
+    });
+  });
+
+  describe("undo()", () => {
+    it("reverts the last commit and restores files to pending", () => {
+      start("undo-test");
+      const m = loadManifest("undo-test");
+      const wt = getWorktreePath(m);
+      const originalBaseline = m.baseline;
+
+      writeFileSync(join(wt, "undoable.txt"), "will be undone\n");
+      sessionCommit("Will undo this", "undo-test");
+
+      undo("undo-test");
+
+      const updated = loadManifest("undo-test");
+      assert.equal(updated.baseline, originalBaseline);
+      assert.equal(updated.changesets.length, 0);
+      assert.ok(updated.pending.includes("undoable.txt"));
+
+      // File should still exist in worktree (unstaged)
+      assert.ok(existsSync(join(wt, "undoable.txt")));
+    });
+
+    it("does nothing with zero changesets", () => {
+      start("nothing-undo");
+      const logs = captureConsole(() => {
+        undo("nothing-undo");
+      });
+      assert.ok(logs.some((l) => l.includes("Nothing to undo")));
+    });
+
+    it("can undo to intermediate changeset", () => {
+      start("undo-mid");
+      const m = loadManifest("undo-mid");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "first.txt"), "first\n");
+      sessionCommit("First", "undo-mid");
+
+      const afterFirst = loadManifest("undo-mid");
+      const firstBaseline = afterFirst.baseline;
+
+      writeFileSync(join(wt, "second.txt"), "second\n");
+      sessionCommit("Second", "undo-mid");
+
+      undo("undo-mid");
+
+      const updated = loadManifest("undo-mid");
+      assert.equal(updated.baseline, firstBaseline);
+      assert.equal(updated.changesets.length, 1);
+      assert.equal(updated.changesets[0].message, "First");
+    });
+  });
+
+  describe("diff()", () => {
+    it("shows unstaged changes", () => {
+      start("diff-test");
+      const m = loadManifest("diff-test");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "README.md"), "modified content\n");
+
+      const logs = captureConsole(() => diff("diff-test"));
+      assert.ok(logs.some((l) => l.includes("modified content") || l.includes("README.md")));
+    });
+
+    it("shows no changes when clean", () => {
+      start("diff-clean");
+      const logs = captureConsole(() => diff("diff-clean"));
+      assert.ok(logs.some((l) => l.includes("No changes")));
+    });
+  });
+
+  describe("merge()", () => {
+    it("merges session branch into current branch", () => {
+      start("merge-test");
+      const m = loadManifest("merge-test");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "merged.txt"), "merge me\n");
+      sessionCommit("Add merged file", "merge-test");
+
+      // Merge should work — we're on main, session is on stint/merge-test
+      merge("merge-test");
+
+      // Session should be cleaned up
+      assert.equal(loadManifest("merge-test"), null);
+
+      // The file should now be in the main repo
+      assert.ok(existsSync(join(repo.dir, "merged.txt")));
+    });
+
+    it("auto-commits pending changes before merging", () => {
+      start("merge-auto");
+      const m = loadManifest("merge-auto");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "uncommitted.txt"), "auto committed\n");
+
+      // Merge should auto-commit the pending changes first
+      merge("merge-auto");
+
+      assert.equal(loadManifest("merge-auto"), null);
+      assert.ok(existsSync(join(repo.dir, "uncommitted.txt")));
+    });
+
+    it("merges cleanly when session has no commits", () => {
+      start("merge-noop");
+      merge("merge-noop");
+      assert.equal(loadManifest("merge-noop"), null);
+      assert.ok(!git.branchExists("stint/merge-noop"));
+    });
+  });
+
+  describe("end()", () => {
+    it("cleans up worktree, branch, and manifest", () => {
+      start("end-test");
+      const m = loadManifest("end-test");
+      const wt = getWorktreePath(m);
+
+      end("end-test");
+
+      assert.equal(loadManifest("end-test"), null);
+      assert.ok(!existsSync(wt));
+      assert.ok(!git.branchExists("stint/end-test"));
+    });
+
+    it("auto-commits pending changes before ending", () => {
+      start("auto-commit-end");
+      const m = loadManifest("auto-commit-end");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "uncommitted.txt"), "will be committed\n");
+
+      // The end function should auto-commit before cleanup
+      end("auto-commit-end");
+
+      // Verify by checking that the branch had a commit (branch is deleted,
+      // but we can check manifest was deleted — it ran without error)
+      assert.equal(loadManifest("auto-commit-end"), null);
+    });
+  });
+
+  describe("abort()", () => {
+    it("discards session without committing", () => {
+      start("abort-test");
+      const m = loadManifest("abort-test");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "discard.txt"), "thrown away\n");
+
+      abort("abort-test");
+
+      assert.equal(loadManifest("abort-test"), null);
+      assert.ok(!existsSync(wt));
+      assert.ok(!git.branchExists("stint/abort-test"));
+    });
+  });
+
+  describe("list()", () => {
+    it("shows no sessions message when empty", () => {
+      const logs = captureConsole(() => list());
+      assert.ok(logs.some((l) => l.includes("No active sessions")));
+    });
+
+    it("shows sessions in table format", () => {
+      start("alpha");
+      start("beta");
+      const logs = captureConsole(() => list());
+      assert.ok(logs.some((l) => l.includes("alpha")));
+      assert.ok(logs.some((l) => l.includes("beta")));
+      assert.ok(logs.some((l) => l.includes("NAME")));
+    });
+  });
+
+  describe("listJson()", () => {
+    it("outputs valid JSON array", () => {
+      start("json-test");
+      const logs = captureConsole(() => listJson());
+      assert.equal(logs.length, 1);
+      const parsed = JSON.parse(logs[0]);
+      assert.ok(Array.isArray(parsed));
+      assert.equal(parsed.length, 1);
+      assert.equal(parsed[0].name, "json-test");
+      assert.equal(parsed[0].branch, "stint/json-test");
+      assert.equal(parsed[0].worktree, ".stint/json-test");
+      assert.equal(parsed[0].commits, 0);
+      assert.equal(parsed[0].pending, 0);
+    });
+
+    it("outputs empty array when no sessions", () => {
+      const logs = captureConsole(() => listJson());
+      const parsed = JSON.parse(logs[0]);
+      assert.deepStrictEqual(parsed, []);
+    });
+  });
+
+  describe("status()", () => {
+    it("shows session information", () => {
+      start("status-test");
+      const logs = captureConsole(() => status("status-test"));
+      assert.ok(logs.some((l) => l.includes("status-test")));
+      assert.ok(logs.some((l) => l.includes("stint/status-test")));
+    });
+  });
+
+  describe("log()", () => {
+    it("shows commit history", () => {
+      start("log-test");
+      const m = loadManifest("log-test");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "logged.txt"), "logged\n");
+      sessionCommit("Logged commit", "log-test");
+
+      const logs = captureConsole(() => log("log-test"));
+      assert.ok(logs.some((l) => l.includes("Logged commit")));
+    });
+
+    it("shows no commits message when empty", () => {
+      start("empty-log");
+      const logs = captureConsole(() => log("empty-log"));
+      assert.ok(logs.some((l) => l.includes("No commits")));
+    });
+  });
+
+  describe("prune()", () => {
+    it("cleans up orphaned branches", () => {
+      // Create a stint branch without a manifest
+      git.createBranch("stint/orphan", "HEAD");
+      assert.ok(git.branchExists("stint/orphan"));
+
+      prune();
+      assert.ok(!git.branchExists("stint/orphan"));
+    });
+
+    it("reports nothing when clean", () => {
+      const logs = captureConsole(() => prune());
+      assert.ok(logs.some((l) => l.includes("Nothing to clean")));
+    });
+
+    it("handles non-directory entries in .stint/", () => {
+      // Create a file inside .stint/ — prune should not crash
+      const stintDir = join(repo.dir, ".stint");
+      execFileSync("mkdir", ["-p", stintDir]);
+      writeFileSync(join(stintDir, "stray-file.txt"), "not a worktree");
+
+      // prune should succeed without error
+      const logs = captureConsole(() => prune());
+      // The stray file should not cause a crash
+      assert.ok(!logs.some((l) => l.includes("stray-file.txt")));
+    });
+
+    it("cleans up leftover stint-combine worktrees", () => {
+      // Simulate a crashed testCombine by creating a combine worktree + branch
+      const combineName = "stint-combine-1234567890";
+      git.createBranch(combineName, "HEAD");
+      const combineDir = join(repo.dir, ".stint", combineName);
+      git.addWorktree(combineDir, combineName);
+      assert.ok(existsSync(combineDir));
+
+      const logs = captureConsole(() => prune());
+      assert.ok(logs.some((l) => l.includes("leftover combine worktree")));
+      assert.ok(!git.branchExists(combineName));
+    });
+  });
+});
+
+// --- Helpers ---
+
+function captureConsole(fn) {
+  const logs = [];
+  const origLog = console.log;
+  const origWarn = console.warn;
+  const origError = console.error;
+  console.log = (...args) => logs.push(args.join(" "));
+  console.warn = (...args) => logs.push(args.join(" "));
+  console.error = (...args) => logs.push(args.join(" "));
+  try {
+    fn();
+  } finally {
+    console.log = origLog;
+    console.warn = origWarn;
+    console.error = origError;
+  }
+  return logs;
+}
+
+function createTempNonGitDir() {
+  const dir = mkdtempSync(join(tmpdir(), "git-stint-no-git-"));
+  const originalCwd = process.cwd();
+  process.chdir(dir);
+  return {
+    dir,
+    cleanup() {
+      process.chdir(originalCwd);
+      rmSync(dir, { recursive: true, force: true });
+    },
+  };
+}

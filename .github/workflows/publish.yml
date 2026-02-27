@@ -1,0 +1,53 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - "v*"
+
+# Token-based publishing (NPM_TOKEN secret).
+#
+# Current token expires ~May 2026. To avoid disruption, either:
+#   1. Rotate the token: npmjs.com → Access Tokens → create new → update GitHub secret
+#   2. Switch to OIDC trusted publishing (no tokens needed):
+#      - Requires npm 11.5.1+ (Node 24+)
+#      - Configure on npmjs.com: package settings → Trusted Publisher → GitHub Actions
+#      - Set: org=rchaz, repo=git-stint, workflow=publish.yml
+#      - Remove NODE_AUTH_TOKEN env from the publish step below
+#      See: https://docs.npmjs.com/trusted-publishers/
+
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        node-version: [20, 22]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run test:all
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

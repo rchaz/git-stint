@@ -1,0 +1,52 @@
+{
+  "name": "git-stint",
+  "version": "0.1.0",
+  "description": "Session-scoped change tracking for AI coding agents",
+  "type": "module",
+  "bin": {
+    "git-stint": "./bin/git-stint",
+    "git-stint-hook-pre-tool": "./adapters/claude-code/hooks/git-stint-hook-pre-tool",
+    "git-stint-hook-stop": "./adapters/claude-code/hooks/git-stint-hook-stop"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "pretest": "tsc",
+    "test": "node --test 'test/unit/**/*.test.js'",
+    "test:security": "node --test 'test/security/**/*.test.js'",
+    "test:integration": "node --test 'test/integration/**/*.test.js'",
+    "test:all": "tsc && node --test 'test/**/*.test.js'"
+  },
+  "files": [
+    "bin/",
+    "dist/",
+    "adapters/"
+  ],
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rchaz/git-stint.git"
+  },
+  "bugs": {
+    "url": "https://github.com/rchaz/git-stint/issues"
+  },
+  "homepage": "https://github.com/rchaz/git-stint#readme",
+  "keywords": [
+    "git",
+    "session",
+    "worktree",
+    "ai-agent",
+    "claude-code",
+    "change-tracking",
+    "branch-management",
+    "developer-tools"
+  ],
+  "author": "Rahul Chandrasekaran",
+  "license": "MIT",
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "@types/node": "^22.0.0"
+  }
+}
