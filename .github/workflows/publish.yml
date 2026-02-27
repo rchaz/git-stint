@@ -5,9 +5,8 @@ on:
     tags:
       - "v*"
 
-# OIDC trusted publishing — no tokens needed, never expires.
-# Configured on npmjs.com: git-stint → Settings → Trusted Publisher → GitHub Actions
-# See: https://docs.npmjs.com/trusted-publishers/
+# Uses NPM_TOKEN secret for authentication.
+# TODO: Switch to OIDC trusted publishing once npmjs.com config is verified.
 
 jobs:
   test:
@@ -37,6 +36,9 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          registry-url: 'https://registry.npmjs.org'
       - run: npm ci
       - run: npm run build
       - run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
