@@ -12,10 +12,10 @@
     "build": "tsc",
     "dev": "tsc --watch",
     "pretest": "tsc",
-    "test": "node --test 'test/unit/**/*.test.js'",
-    "test:security": "node --test 'test/security/**/*.test.js'",
-    "test:integration": "node --test 'test/integration/**/*.test.js'",
-    "test:all": "tsc && node --test 'test/**/*.test.js'"
+    "test": "node --test test/unit/*.test.js",
+    "test:security": "node --test test/security/*.test.js",
+    "test:integration": "node --test test/integration/*.test.js",
+    "test:all": "tsc && node --test test/unit/*.test.js test/security/*.test.js test/integration/*.test.js"
   },
   "files": [
     "bin/",
