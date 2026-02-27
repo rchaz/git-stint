@@ -37,7 +37,19 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
+          registry-url: 'https://registry.npmjs.org'
       - run: npm install -g npm@latest
+      - name: Debug OIDC environment
+        run: |
+          echo "npm version: $(npm -v)"
+          echo "node version: $(node -v)"
+          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
+          echo "NODE_AUTH_TOKEN set: ${NODE_AUTH_TOKEN:+yes}"
+          cat ~/.npmrc 2>/dev/null || echo "No .npmrc"
+      - name: Clear auth token for OIDC
+        run: |
+          npm config delete //registry.npmjs.org/:_authToken 2>/dev/null || true
+          echo "registry=https://registry.npmjs.org/" > ~/.npmrc
       - run: npm ci
       - run: npm run build
       - run: npm publish --provenance --access public
