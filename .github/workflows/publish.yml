@@ -37,17 +37,6 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: 24
-      - name: Debug OIDC environment
-        run: |
-          echo "npm version: $(npm -v)"
-          echo "node version: $(node -v)"
-          echo "ACTIONS_ID_TOKEN_REQUEST_URL set: ${ACTIONS_ID_TOKEN_REQUEST_URL:+yes}"
-          echo "NODE_AUTH_TOKEN set: ${NODE_AUTH_TOKEN:+yes}"
-          echo "NPM_CONFIG_USERCONFIG: ${NPM_CONFIG_USERCONFIG:-not set}"
-          cat ~/.npmrc 2>/dev/null || echo "No ~/.npmrc"
-          npm config list 2>/dev/null || true
       - run: npm ci
       - run: npm run build
       - run: npm publish --provenance --access public
-        env:
-          NPM_CONFIG_PROVENANCE: "true"

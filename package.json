@@ -1,6 +1,6 @@
 {
   "name": "git-stint",
-  "version": "0.1.8",
+  "version": "0.1.9",
   "description": "Session-scoped change tracking for AI coding agents",
   "type": "module",
   "bin": {
@@ -43,6 +43,10 @@
     "branch-management",
     "developer-tools"
   ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  },
   "author": "Rahul Chandrasekaran",
   "license": "MIT",
   "devDependencies": {
