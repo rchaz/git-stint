@@ -15,10 +15,10 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        node-version: [20, 22]
+        node-version: [22, 24]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
           node-version: ${{ matrix.node-version }}
           cache: npm
@@ -33,13 +33,11 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: lts/*
+          node-version: 24
       - run: npm install -g npm@latest
       - run: npm ci
       - run: npm run build
       - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ""

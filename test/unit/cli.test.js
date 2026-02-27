@@ -211,8 +211,10 @@ describe("install-hooks / uninstall-hooks", () => {
       assert.ok(settings.hooks);
       assert.ok(settings.hooks.PreToolUse);
       assert.ok(settings.hooks.Stop);
-      assert.ok(settings.hooks.PreToolUse.some((h) => h.command === "git-stint-hook-pre-tool"));
-      assert.ok(settings.hooks.Stop.some((h) => h.command === "git-stint-hook-stop"));
+      assert.ok(settings.hooks.PreToolUse.some((h) =>
+        h.hooks?.some((hh) => hh.command === "git-stint-hook-pre-tool")));
+      assert.ok(settings.hooks.Stop.some((h) =>
+        h.hooks?.some((hh) => hh.command === "git-stint-hook-stop")));
 
       // Now uninstall
       uninstall("project");
@@ -231,11 +233,11 @@ describe("install-hooks / uninstall-hooks", () => {
     const origCwd = process.cwd();
     process.chdir(tmpDir);
     try {
-      // Write settings with an existing non-stint hook
+      // Write settings with an existing non-stint hook (new format)
       writeFileSync(settingsPath, JSON.stringify({
         hooks: {
           PreToolUse: [
-            { command: "my-other-hook", matcher: "Write" },
+            { matcher: { tools: ["Write"] }, hooks: [{ type: "command", command: "my-other-hook" }] },
           ],
         },
       }, null, 2));
@@ -254,7 +256,7 @@ describe("install-hooks / uninstall-hooks", () => {
       const after = JSON.parse(readFileSync(settingsPath, "utf-8"));
       assert.ok(after.hooks.PreToolUse);
       assert.equal(after.hooks.PreToolUse.length, 1);
-      assert.equal(after.hooks.PreToolUse[0].command, "my-other-hook");
+      assert.equal(after.hooks.PreToolUse[0].hooks[0].command, "my-other-hook");
     } finally {
       process.chdir(origCwd);
     }
