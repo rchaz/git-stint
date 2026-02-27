@@ -74,3 +74,15 @@ Zero runtime dependencies. Dev dependencies: TypeScript + @types/node only.
 3. If adding new commands, add corresponding tests in `test/unit/session.test.js`
 4. If adding git operations, use functions from `src/git.ts` — don't call git directly
 5. If modifying manifests, ensure backward compatibility (check `loadManifest` version defaulting)
+
+## Publishing
+
+After changes are committed and pushed to `main`, publish to npm:
+
+1. Bump the version in **both** `package.json` and `package-lock.json`
+2. Commit: `git commit -am "v0.X.Y"`
+3. Push: `git push origin main`
+4. Tag and push: `git tag v0.X.Y && git push origin v0.X.Y`
+
+The tag push triggers CI (tests on ubuntu + macos, Node 22 + 24) then publishes to npm.
+Use **patch** bumps for fixes, **minor** bumps for features.
