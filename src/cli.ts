@@ -9,7 +9,7 @@ const args = process.argv.slice(2);
 const command = args[0];
 
 // Known flags that take a value (used by arg parser to skip correctly)
-const VALUE_FLAGS = new Set(["-m", "--session", "--title", "--combine"]);
+const VALUE_FLAGS = new Set(["-m", "--session", "--title", "--combine", "--client-id"]);
 
 function getFlag(flag: string): string | undefined {
   // Check for --flag=value syntax
@@ -69,7 +69,8 @@ try {
   switch (command) {
     case "start": {
       const name = getPositional(0);
-      session.start(name);
+      const clientId = getFlag("--client-id");
+      session.start(name, clientId);
       break;
     }
 
@@ -189,6 +190,11 @@ try {
       break;
     }
 
+    case "allow-main": {
+      session.allowMain();
+      break;
+    }
+
     case "install-hooks": {
       const { install } = await import("./install-hooks.js");
       const scope = args.includes("--user") ? "user" : "project";
@@ -268,11 +274,13 @@ Commands:
   test [-- <cmd>]           Run tests in the session worktree
   test --combine A B        Test multiple sessions merged together
   prune                     Clean up orphaned worktrees/branches
+  allow-main                Allow writes to main branch (until next session start)
   install-hooks [--user]    Install Claude Code hooks
   uninstall-hooks [--user]  Remove Claude Code hooks
 
 Options:
   --session <name>          Specify session (auto-detected from CWD)
+  --client-id <id>          Tag session with a client identifier (used by hooks)
   -m "message"              Commit/squash message
   --title "title"           PR title
   --version                 Show version number

@@ -5,14 +5,27 @@
 #
 # Reads tool input from stdin (JSON), extracts file_path, and tracks it.
 #
+# Session affinity via clientId:
+#   Each Claude Code instance has a unique PID. Hooks spawned by that instance
+#   see it as $PPID. We use $PPID as a clientId to map each Claude instance
+#   to its own stint session, preventing cross-instance session hijacking.
+#
 # Behavior:
+#   - File is outside the current repo: allows silently (not our business).
 #   - File is inside a .stint/ worktree: tracks the file, allows the write.
-#   - File is in main repo with active session: blocks the write and tells
-#     the agent to work in the worktree directory instead.
-#   - No session active: allows the write silently.
+#   - File is in main repo, session with matching clientId exists: blocks and
+#     redirects to that session's worktree.
+#   - File is in main repo, no matching clientId but other sessions exist:
+#     creates a NEW session for this client (doesn't hijack others).
+#   - No sessions at all: auto-creates a session with clientId, then blocks
+#     so the agent retries using the worktree path.
 #
 
 set -euo pipefail
+
+# Client identity: PPID is the Claude Code Node.js process that spawned this hook.
+# Stable across all hook invocations within one conversation, different between instances.
+CLIENT_ID="${PPID:-}"
 
 # Check that git-stint is available
 if ! command -v git-stint &>/dev/null; then
@@ -24,9 +37,10 @@ fi
 # Read the tool input from stdin
 INPUT=$(cat)
 
-# Extract file_path using jq if available, fallback to grep/sed
+# Extract file_path using jq if available, fallback to grep/sed.
+# Claude Code wraps tool args in {"tool_input": {...}}, so check both paths.
 if command -v jq &>/dev/null; then
-  FILE_PATH=$(echo "$INPUT" | jq -r '.file_path // .notebook_path // empty' 2>/dev/null || true)
+  FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.notebook_path // .file_path // .notebook_path // empty' 2>/dev/null || true)
 else
   FILE_PATH=$(echo "$INPUT" | grep -o '"file_path"[[:space:]]*:[[:space:]]*"[^"]*"' | head -1 | sed 's/.*"file_path"[[:space:]]*:[[:space:]]*"//' | sed 's/"$//')
   if [ -z "$FILE_PATH" ]; then
@@ -39,6 +53,19 @@ if [ -z "$FILE_PATH" ]; then
   exit 0
 fi
 
+# Determine repo root early — needed for all checks below.
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "$REPO_ROOT" ]; then
+  # Not in a git repo — allow silently
+  exit 0
+fi
+
+# If the file is outside this repo, allow silently (not our business).
+case "$FILE_PATH" in
+  "$REPO_ROOT"/*) ;; # inside repo — continue
+  *) exit 0 ;;       # outside repo — allow
+esac
+
 # Check if the file being edited is inside a stint worktree (check the file path, not pwd)
 # Match /.stint/<name>/ precisely — avoid false positives like /my.stint/ or /.stinted/
 if echo "$FILE_PATH" | grep -qE '/\.stint/[^/]+/'; then
@@ -47,50 +74,105 @@ if echo "$FILE_PATH" | grep -qE '/\.stint/[^/]+/'; then
   exit 0
 fi
 
+# --- Read .stint.json config for main_branch_policy ---
+MAIN_BRANCH_POLICY="prompt"  # default
+STINT_CONFIG="$REPO_ROOT/.stint.json"
+if [ -f "$STINT_CONFIG" ]; then
+  if command -v jq &>/dev/null; then
+    _policy=$(jq -r '.main_branch_policy // empty' "$STINT_CONFIG" 2>/dev/null || true)
+  else
+    _policy=$(grep -o '"main_branch_policy"[[:space:]]*:[[:space:]]*"[^"]*"' "$STINT_CONFIG" 2>/dev/null | head -1 | sed 's/.*"main_branch_policy"[[:space:]]*:[[:space:]]*"//;s/"$//')
+  fi
+  case "$_policy" in
+    allow|block|prompt) MAIN_BRANCH_POLICY="$_policy" ;;
+  esac
+fi
+
 # The file is NOT in a stint worktree. Check if any stint session exists.
 SESSIONS_DIR="$(git rev-parse --git-common-dir 2>/dev/null)/sessions"
 if [ -d "$SESSIONS_DIR" ]; then
-  # Iterate session manifests to find the best one to suggest.
-  REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
-  BEST_WORKTREE=""
-  BEST_SESSION=""
+  MY_WORKTREE=""
+  MY_SESSION=""
+  OTHER_SESSIONS=""
 
   for manifest in "$SESSIONS_DIR"/*.json; do
     [ -f "$manifest" ] || continue
-    # Skip .tmp files (glob won't match, but be safe)
     case "$manifest" in *.tmp) continue ;; esac
 
     if command -v jq &>/dev/null; then
       wt=$(jq -r '.worktree // empty' "$manifest" 2>/dev/null || true)
       sn=$(jq -r '.name // empty' "$manifest" 2>/dev/null || true)
+      cid=$(jq -r '.clientId // empty' "$manifest" 2>/dev/null || true)
     else
       wt=$(grep -o '"worktree"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" | head -1 | sed 's/.*"worktree"[[:space:]]*:[[:space:]]*"//;s/"$//')
       sn=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" | head -1 | sed 's/.*"name"[[:space:]]*:[[:space:]]*"//;s/"$//')
+      cid=$(grep -o '"clientId"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" | head -1 | sed 's/.*"clientId"[[:space:]]*:[[:space:]]*"//;s/"$//')
     fi
 
-    if [ -z "$BEST_WORKTREE" ] && [ -n "$wt" ]; then
-      BEST_WORKTREE="$wt"
-      BEST_SESSION="$sn"
+    if [ -n "$CLIENT_ID" ] && [ "$cid" = "$CLIENT_ID" ] && [ -n "$wt" ]; then
+      # This session belongs to us
+      MY_WORKTREE="$wt"
+      MY_SESSION="$sn"
+    elif [ -n "$sn" ]; then
+      OTHER_SESSIONS="${OTHER_SESSIONS:+$OTHER_SESSIONS, }$sn"
     fi
   done
 
-  if [ -n "$BEST_WORKTREE" ]; then
-    # Active session exists but agent is writing to the main repo — block.
-    if [ -n "$REPO_ROOT" ]; then
-      ABS_WORKTREE="$REPO_ROOT/$BEST_WORKTREE"
-      echo "BLOCKED: You have an active stint session '${BEST_SESSION}'." >&2
-      echo "You must work in the session worktree, not the main repo." >&2
-      echo "Run: cd \"$ABS_WORKTREE\"" >&2
-      echo "Then retry your edit. The file you need is: $ABS_WORKTREE/${FILE_PATH#$REPO_ROOT/}" >&2
-    else
-      echo "BLOCKED: An active stint session exists. Work in the session worktree instead." >&2
-      echo "Run: git stint list" >&2
-    fi
-
-    # Exit non-zero to block the tool call
-    exit 1
+  if [ -n "$MY_WORKTREE" ]; then
+    # Found our session — redirect to it
+    ABS_WORKTREE="$REPO_ROOT/$MY_WORKTREE"
+    echo "BLOCKED: You have an active stint session '${MY_SESSION}'." >&2
+    echo "You must work in the session worktree, not the main repo." >&2
+    echo "Rewrite your file path from: $FILE_PATH" >&2
+    echo "To: $ABS_WORKTREE/${FILE_PATH#$REPO_ROOT/}" >&2
+    exit 2
   fi
+
+  # No session matches our clientId, but other sessions exist.
+  # Don't hijack them — fall through to create our own session.
 fi
 
-# No session active — allow the write
-exit 0
+# No session for this client — check main_branch_policy before auto-creating.
+GIT_COMMON_DIR="$(git rev-parse --git-common-dir 2>/dev/null)"
+
+if [ "$MAIN_BRANCH_POLICY" = "allow" ]; then
+  # Policy explicitly allows writes to main — pass through
+  exit 0
+fi
+
+if [ "$MAIN_BRANCH_POLICY" = "prompt" ]; then
+  # Check for allow-main flag file
+  if [ -f "$GIT_COMMON_DIR/stint-main-allowed" ]; then
+    exit 0
+  fi
+  echo "BLOCKED: Writing to main branch." >&2
+  echo "To allow, run: git stint allow-main" >&2
+  echo "To create a session instead, run: git stint start <name>" >&2
+  exit 2
+fi
+
+# Policy is "block" (or default) — auto-start a session, then block so agent retries in worktree.
+SESSION_NAME="session-$(date +%Y%m%d-%H%M%S)"
+CLIENT_FLAG=""
+if [ -n "$CLIENT_ID" ]; then
+  CLIENT_FLAG="--client-id $CLIENT_ID"
+fi
+
+START_OUTPUT=$(git-stint start "$SESSION_NAME" $CLIENT_FLAG 2>&1) || {
+  # If start fails, allow the write
+  exit 0
+}
+
+# Extract worktree path from the start output
+WORKTREE_PATH=$(echo "$START_OUTPUT" | grep -o 'Worktree:.*' | sed 's/Worktree:[[:space:]]*//')
+if [ -z "$WORKTREE_PATH" ]; then
+  WORKTREE_PATH="$REPO_ROOT/.stint/$SESSION_NAME"
+fi
+
+echo "git-stint: Auto-created session '${SESSION_NAME}'." >&2
+echo "All edits must target the worktree: $WORKTREE_PATH" >&2
+echo "Rewrite your file path from: $FILE_PATH" >&2
+echo "To: ${WORKTREE_PATH}/${FILE_PATH#$REPO_ROOT/}" >&2
+
+# Block so the agent retries with the worktree path
+exit 2

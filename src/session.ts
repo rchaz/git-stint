@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import * as git from "./git.js";
+import { loadConfig } from "./config.js";
 import {
   type SessionManifest,
   type Changeset,
@@ -112,7 +113,7 @@ function warnIfInsideWorktree(worktree: string): void {
 
 // --- Commands ---
 
-export function start(name?: string): void {
+export function start(name?: string, clientId?: string): void {
   if (!git.isInsideGitRepo()) {
     throw new Error("Not inside a git repository.");
   }
@@ -148,6 +149,45 @@ export function start(name?: string): void {
     throw err;
   }
 
+  // Adopt uncommitted changes from main repo (before symlinking, to avoid conflicts)
+  const config = loadConfig(topLevel);
+  let adoptedFiles = 0;
+  if (git.hasUncommittedChanges(topLevel)) {
+    const statusOutput = git.statusShort(topLevel);
+    adoptedFiles = statusOutput.split("\n").filter(Boolean).length;
+    try {
+      git.stash(topLevel);
+      try {
+        git.stashPop(worktreeAbs);
+      } catch {
+        // Stash pop failed — restore stash to main repo
+        console.warn("Warning: Could not apply uncommitted changes to worktree. Stash preserved in main repo.");
+        try { git.stashPop(topLevel); } catch { /* leave stash intact */ }
+      }
+    } catch {
+      // Nothing to stash (git stash can fail if changes are only untracked and gitignored)
+      adoptedFiles = 0;
+    }
+  }
+
+  // Symlink shared directories from config (after adopt, so stash pop doesn't conflict with symlinks)
+  const linkedDirs: string[] = [];
+  for (const dir of config.shared_dirs) {
+    const source = resolve(topLevel, dir);
+    const target = resolve(worktreeAbs, dir);
+    if (!existsSync(source)) {
+      console.warn(`Warning: shared_dirs entry '${dir}' not found in repo, skipping.`);
+      continue;
+    }
+    if (existsSync(target)) continue; // already exists (e.g., tracked in git or adopted from stash)
+    mkdirSync(dirname(target), { recursive: true });
+    symlinkSync(source, target);
+    linkedDirs.push(dir);
+  }
+
+  // Revoke main-branch write pass when entering session mode
+  removeAllowMainFlag();
+
   // Create manifest
   const manifest: SessionManifest = {
     version: MANIFEST_VERSION,
@@ -158,12 +198,25 @@ export function start(name?: string): void {
     worktree: worktreeRel,
     changesets: [],
     pending: [],
+    ...(clientId ? { clientId } : {}),
   };
   saveManifest(manifest);
 
   console.log(`Session '${sessionName}' started.`);
   console.log(`  Branch:   ${branchName}`);
   console.log(`  Worktree: ${worktreeAbs}`);
+
+  if (linkedDirs.length > 0) {
+    console.log(`\nShared directories (symlinked — changes affect main repo):`);
+    for (const dir of linkedDirs) {
+      console.log(`  ${dir} → ${resolve(topLevel, dir)}`);
+    }
+  }
+
+  if (adoptedFiles > 0) {
+    console.log(`\nCarried over ${adoptedFiles} uncommitted file(s) into session.`);
+  }
+
   console.log(`\ncd "${worktreeAbs}"`);
 }
 
@@ -636,6 +689,23 @@ export function prune(): void {
 
 function cleanup(manifest: SessionManifest, force = false): void {
   const worktree = getWorktreePath(manifest);
+  const topLevel = getRepoRoot();
+  const config = loadConfig(topLevel);
+
+  // Remove shared dir symlinks before removing worktree to protect linked data
+  if (existsSync(worktree)) {
+    for (const dir of config.shared_dirs) {
+      const target = resolve(worktree, dir);
+      if (!existsSync(target)) continue;
+      try {
+        if (lstatSync(target).isSymbolicLink()) {
+          unlinkSync(target);
+        } else {
+          console.warn(`Warning: '${dir}' in worktree is a real directory (not a symlink). Data will be lost on cleanup.`);
+        }
+      } catch { /* best effort */ }
+    }
+  }
 
   // Remove worktree
   if (existsSync(worktree)) {
@@ -643,8 +713,16 @@ function cleanup(manifest: SessionManifest, force = false): void {
       git.removeWorktree(worktree, force);
     } catch (err) {
       if (!force) {
-        // Retry with force only if we didn't already try force
-        git.removeWorktree(worktree, true);
+        // Apply force_cleanup policy
+        if (config.force_cleanup === "fail") {
+          throw err;
+        }
+        if (config.force_cleanup === "force") {
+          git.removeWorktree(worktree, true);
+        } else {
+          // "prompt" (default) — retry with force, matching previous behavior
+          git.removeWorktree(worktree, true);
+        }
       } else {
         throw err;
       }
@@ -663,4 +741,28 @@ function cleanup(manifest: SessionManifest, force = false): void {
 
   // Delete manifest last — if anything above fails, manifest persists for prune
   deleteManifest(manifest.name);
+}
+
+// --- Allow-main flag ---
+
+const ALLOW_MAIN_FLAG = "stint-main-allowed";
+
+function getAllowMainPath(): string {
+  const commonDir = resolve(git.getGitCommonDir());
+  return join(commonDir, ALLOW_MAIN_FLAG);
+}
+
+function removeAllowMainFlag(): void {
+  const flagPath = getAllowMainPath();
+  if (existsSync(flagPath)) unlinkSync(flagPath);
+}
+
+/** Create flag file allowing writes to main branch. Revoked on next `git stint start`. */
+export function allowMain(): void {
+  if (!git.isInsideGitRepo()) {
+    throw new Error("Not inside a git repository.");
+  }
+  const flagPath = getAllowMainPath();
+  writeFileSync(flagPath, new Date().toISOString() + "\n");
+  console.log("Main branch writes allowed (until next `git stint start`).");
 }

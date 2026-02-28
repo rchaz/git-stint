@@ -1,7 +1,7 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
 import { createTempRepo } from "../helpers/temp-repo.js";
@@ -20,6 +20,7 @@ import {
   list,
   listJson,
   prune,
+  allowMain,
 } from "../../dist/session.js";
 import {
   loadManifest,
@@ -513,6 +514,177 @@ describe("session", () => {
       assert.ok(logs.some((l) => l.includes("leftover combine worktree")));
       assert.ok(!git.branchExists(combineName));
     });
+  });
+});
+
+describe("shared dirs", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTempRepo();
+  });
+  afterEach(() => {
+    repo.cleanup();
+  });
+
+  it("symlinks shared_dirs from config into worktree", () => {
+    // Create shared dirs in main repo (gitignored, as in real usage)
+    mkdirSync(join(repo.dir, "backend", "data"), { recursive: true });
+    writeFileSync(join(repo.dir, "backend", "data", "cache.parquet"), "data");
+    writeFileSync(join(repo.dir, ".gitignore"), "backend/data/\n.stint.json\n");
+    execFileSync("git", ["-C", repo.dir, "add", ".gitignore"], { stdio: "pipe" });
+    execFileSync("git", ["-C", repo.dir, "commit", "-m", "gitignore"], { stdio: "pipe" });
+
+    // Write config
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({
+      shared_dirs: ["backend/data"],
+    }));
+
+    start("shared-test");
+    const m = loadManifest("shared-test");
+    const wt = getWorktreePath(m);
+
+    // Symlink should exist and be a symlink
+    const target = join(wt, "backend", "data");
+    assert.ok(existsSync(target), "symlink target should exist");
+    assert.ok(lstatSync(target).isSymbolicLink(), "should be a symlink");
+
+    // Data should be accessible through symlink
+    assert.equal(readFileSync(join(target, "cache.parquet"), "utf-8"), "data");
+
+    end("shared-test");
+  });
+
+  it("preserves shared dir data after cleanup", () => {
+    mkdirSync(join(repo.dir, "backend", "data"), { recursive: true });
+    writeFileSync(join(repo.dir, "backend", "data", "important.dat"), "keep me");
+    writeFileSync(join(repo.dir, ".gitignore"), "backend/data/\n.stint.json\n");
+    execFileSync("git", ["-C", repo.dir, "add", ".gitignore"], { stdio: "pipe" });
+    execFileSync("git", ["-C", repo.dir, "commit", "-m", "gitignore"], { stdio: "pipe" });
+
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({
+      shared_dirs: ["backend/data"],
+    }));
+
+    start("preserve-test");
+    const m = loadManifest("preserve-test");
+    const wt = getWorktreePath(m);
+
+    // Write data through symlink
+    writeFileSync(join(wt, "backend", "data", "new.dat"), "new data");
+
+    end("preserve-test");
+
+    // Original data should still be intact
+    assert.equal(readFileSync(join(repo.dir, "backend", "data", "important.dat"), "utf-8"), "keep me");
+    assert.equal(readFileSync(join(repo.dir, "backend", "data", "new.dat"), "utf-8"), "new data");
+  });
+
+  it("warns when shared_dirs entry does not exist", () => {
+    writeFileSync(join(repo.dir, ".gitignore"), ".stint.json\n");
+    execFileSync("git", ["-C", repo.dir, "add", ".gitignore"], { stdio: "pipe" });
+    execFileSync("git", ["-C", repo.dir, "commit", "-m", "gitignore"], { stdio: "pipe" });
+
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({
+      shared_dirs: ["nonexistent/dir"],
+    }));
+
+    const logs = captureConsole(() => start("warn-test"));
+    assert.ok(logs.some((l) => l.includes("not found in repo")));
+
+    end("warn-test");
+  });
+
+  it("prints shared dir summary on start", () => {
+    mkdirSync(join(repo.dir, "data"), { recursive: true });
+    writeFileSync(join(repo.dir, ".gitignore"), "data/\n.stint.json\n");
+    execFileSync("git", ["-C", repo.dir, "add", ".gitignore"], { stdio: "pipe" });
+    execFileSync("git", ["-C", repo.dir, "commit", "-m", "gitignore"], { stdio: "pipe" });
+
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({
+      shared_dirs: ["data"],
+    }));
+
+    const logs = captureConsole(() => start("summary-test"));
+    assert.ok(logs.some((l) => l.includes("Shared directories")));
+    assert.ok(logs.some((l) => l.includes("data")));
+
+    end("summary-test");
+  });
+});
+
+describe("adopt uncommitted changes", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTempRepo();
+  });
+  afterEach(() => {
+    repo.cleanup();
+  });
+
+  it("carries uncommitted changes into new session", () => {
+    // Make uncommitted changes on main
+    writeFileSync(join(repo.dir, "wip.txt"), "work in progress\n");
+
+    const logs = captureConsole(() => start("adopt-test"));
+    assert.ok(logs.some((l) => l.includes("Carried over")));
+
+    const m = loadManifest("adopt-test");
+    const wt = getWorktreePath(m);
+
+    // Changes should be in worktree
+    assert.ok(existsSync(join(wt, "wip.txt")));
+    assert.equal(readFileSync(join(wt, "wip.txt"), "utf-8"), "work in progress\n");
+
+    // Main repo should be clean
+    assert.ok(!git.hasUncommittedChanges(repo.dir));
+
+    end("adopt-test");
+  });
+
+  it("handles modified tracked files", () => {
+    // Modify existing tracked file
+    writeFileSync(join(repo.dir, "README.md"), "modified content\n");
+
+    const logs = captureConsole(() => start("adopt-modified"));
+    assert.ok(logs.some((l) => l.includes("Carried over")));
+
+    const m = loadManifest("adopt-modified");
+    const wt = getWorktreePath(m);
+    assert.equal(readFileSync(join(wt, "README.md"), "utf-8"), "modified content\n");
+
+    end("adopt-modified");
+  });
+});
+
+describe("allowMain()", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTempRepo();
+  });
+  afterEach(() => {
+    repo.cleanup();
+  });
+
+  it("creates flag file in .git", () => {
+    allowMain();
+    const commonDir = git.getGitCommonDir();
+    const flagPath = join(commonDir, "stint-main-allowed");
+    assert.ok(existsSync(flagPath));
+  });
+
+  it("flag is removed when starting a session", () => {
+    allowMain();
+    const commonDir = git.getGitCommonDir();
+    const flagPath = join(commonDir, "stint-main-allowed");
+    assert.ok(existsSync(flagPath));
+
+    start("revoke-test");
+    assert.ok(!existsSync(flagPath), "flag should be removed on start");
+
+    end("revoke-test");
   });
 });
 

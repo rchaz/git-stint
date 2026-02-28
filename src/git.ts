@@ -151,6 +151,14 @@ export function push(branch: string): void {
   git("push", "-u", "origin", branch);
 }
 
+export function stash(dir: string): string {
+  return gitInDir(dir, "stash", "--include-untracked");
+}
+
+export function stashPop(dir: string): string {
+  return gitInDir(dir, "stash", "pop");
+}
+
 export function isInsideGitRepo(): boolean {
   try {
     git("rev-parse", "--is-inside-work-tree");

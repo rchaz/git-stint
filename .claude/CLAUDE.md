@@ -15,6 +15,21 @@ npm run test:all     # Build + run all tests
 
 Always build before testing — tests import from `dist/`.
 
+## Source Files
+
+| File | Purpose |
+|------|---------|
+| `src/git.ts` | Git command wrappers (execFileSync, array args) |
+| `src/manifest.ts` | Session state CRUD (`.git/sessions/<name>.json`) |
+| `src/session.ts` | Core commands: start, commit, squash, merge, pr, end, abort, undo, allowMain |
+| `src/config.ts` | `.stint.json` loading + validation (shared_dirs, main_branch_policy, force_cleanup) |
+| `src/conflicts.ts` | Cross-session file overlap detection |
+| `src/test-session.ts` | Worktree-based testing + combined testing |
+| `src/cli.ts` | Entry point, argument parsing, command dispatch |
+| `src/install-hooks.ts` | Claude Code hook installation/removal |
+| `adapters/claude-code/hooks/git-stint-hook-pre-tool` | PreToolUse hook (bash) — reads `.stint.json`, enforces main_branch_policy |
+| `adapters/claude-code/hooks/git-stint-hook-stop` | Stop hook (bash) — auto-commits WIP on conversation end |
+
 ## Coding Rules
 
 - Use `execFileSync` (array args), NEVER `execSync` (string args)
@@ -23,14 +38,25 @@ Always build before testing — tests import from `dist/`.
 - Use `saveManifest()` for writes — atomic temp+rename
 - Session names: `^[a-zA-Z0-9][a-zA-Z0-9._-]*$`, no `..`, no spaces
 - Zero runtime dependencies
+- Config is loaded via `loadConfig(repoRoot)` from `src/config.ts` — always merges with defaults
 
 ## When Making Changes
 
 1. `npm run build` to check compilation
-2. `npm run test:all` to verify all tests pass
+2. `npm run test:all` to verify all tests pass (129 tests across unit, security, integration)
 3. New commands need tests in `test/unit/session.test.js`
-4. Git operations go through `src/git.ts` — don't call git directly
-5. Manifest changes must be backward compatible
+4. Config-related changes need tests in `test/unit/config.test.js`
+5. Git operations go through `src/git.ts` — don't call git directly
+6. Manifest changes must be backward compatible
+7. Hook changes go in `adapters/claude-code/hooks/` (bash scripts)
+
+## Key Concepts
+
+- **shared_dirs**: Symlinks from worktree to main repo for gitignored dirs (caches, data). Created on `start()`, unlinked before `cleanup()`.
+- **main_branch_policy**: `"block"` (auto-session), `"prompt"` (check flag), `"allow"` (pass through). Enforced by the PreToolUse hook.
+- **allow-main flag**: `.git/stint-main-allowed` — created by `allowMain()`, revoked on `start()`.
+- **adopt changes**: `start()` stashes uncommitted changes from main, pops into worktree. Stash happens before symlink creation to avoid conflicts.
+- **clientId**: Session affinity via `$PPID`. Each Claude Code instance maps to its own session.
 
 ## Publishing
 

@@ -7,14 +7,16 @@
 
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, writeFileSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { execFileSync } from "node:child_process";
 import { createTempRepo } from "../helpers/temp-repo.js";
 import {
   start,
   track,
   sessionCommit,
   squash,
+  merge,
   undo,
   end,
   abort,
@@ -233,6 +235,131 @@ describe("integration: prune handles orphans", () => {
     // Prune should clean it up
     prune();
     assert.equal(loadManifest("ghost-session"), null);
+  });
+});
+
+describe("integration: shared dirs lifecycle", () => {
+  beforeEach(() => {
+    repo = createTempRepo();
+  });
+  afterEach(() => {
+    repo.cleanup();
+  });
+
+  it("start → write through symlink → end → data persists in main repo", () => {
+    // Set up shared dirs (gitignored, as in real usage — cached data)
+    mkdirSync(join(repo.dir, "data", "cache"), { recursive: true });
+    mkdirSync(join(repo.dir, "results"), { recursive: true });
+    writeFileSync(join(repo.dir, "data", "cache", "existing.parquet"), "existing data");
+
+    // Gitignore shared dirs so stash doesn't capture them
+    writeFileSync(join(repo.dir, ".gitignore"), "data/\nresults/\n");
+    execFileSync("git", ["-C", repo.dir, "add", ".gitignore"], { stdio: "pipe" });
+    execFileSync("git", ["-C", repo.dir, "commit", "-m", "Add gitignore"], { stdio: "pipe" });
+
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({
+      shared_dirs: ["data", "results"],
+    }));
+
+    // Start session
+    start("shared-lifecycle");
+    const m = loadManifest("shared-lifecycle");
+    const wt = getWorktreePath(m);
+
+    // Verify symlinks exist
+    assert.ok(lstatSync(join(wt, "data")).isSymbolicLink());
+    assert.ok(lstatSync(join(wt, "results")).isSymbolicLink());
+
+    // Write data through symlinks
+    writeFileSync(join(wt, "data", "cache", "new.parquet"), "new cached data");
+    writeFileSync(join(wt, "results", "output.json"), '{"result": true}');
+
+    // Also make a regular code change and commit
+    writeFileSync(join(wt, "src.ts"), "export const x = 1;\n");
+    sessionCommit("Add src", "shared-lifecycle");
+
+    // End session
+    end("shared-lifecycle");
+
+    // Shared data should persist in main repo
+    assert.equal(
+      readFileSync(join(repo.dir, "data", "cache", "existing.parquet"), "utf-8"),
+      "existing data",
+    );
+    assert.equal(
+      readFileSync(join(repo.dir, "data", "cache", "new.parquet"), "utf-8"),
+      "new cached data",
+    );
+    assert.equal(
+      readFileSync(join(repo.dir, "results", "output.json"), "utf-8"),
+      '{"result": true}',
+    );
+
+    // Worktree should be gone
+    assert.ok(!existsSync(wt));
+  });
+
+  it("abort also preserves shared dir data", () => {
+    mkdirSync(join(repo.dir, "data"), { recursive: true });
+    writeFileSync(join(repo.dir, "data", "precious.dat"), "precious");
+
+    // Gitignore data dir
+    writeFileSync(join(repo.dir, ".gitignore"), "data/\n");
+    execFileSync("git", ["-C", repo.dir, "add", ".gitignore"], { stdio: "pipe" });
+    execFileSync("git", ["-C", repo.dir, "commit", "-m", "Add gitignore"], { stdio: "pipe" });
+
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({
+      shared_dirs: ["data"],
+    }));
+
+    start("shared-abort");
+    const m = loadManifest("shared-abort");
+    const wt = getWorktreePath(m);
+
+    // Write through symlink
+    writeFileSync(join(wt, "data", "added.dat"), "added");
+
+    abort("shared-abort");
+
+    // Data should survive abort
+    assert.equal(readFileSync(join(repo.dir, "data", "precious.dat"), "utf-8"), "precious");
+    assert.equal(readFileSync(join(repo.dir, "data", "added.dat"), "utf-8"), "added");
+  });
+});
+
+describe("integration: adopt uncommitted changes", () => {
+  beforeEach(() => {
+    repo = createTempRepo();
+  });
+  afterEach(() => {
+    repo.cleanup();
+  });
+
+  it("uncommitted changes move from main to worktree and back on merge", () => {
+    // Create uncommitted work on main
+    writeFileSync(join(repo.dir, "wip.ts"), "const draft = true;\n");
+    writeFileSync(join(repo.dir, "README.md"), "updated readme\n");
+
+    // Start session — should adopt changes
+    start("adopt-merge");
+    const m = loadManifest("adopt-merge");
+    const wt = getWorktreePath(m);
+
+    // Main should be clean
+    assert.ok(!git.hasUncommittedChanges(repo.dir));
+
+    // Worktree should have the changes
+    assert.ok(existsSync(join(wt, "wip.ts")));
+
+    // Commit in worktree
+    sessionCommit("Adopt and commit", "adopt-merge");
+
+    // Merge back to main
+    merge("adopt-merge");
+
+    // Main should now have the file (committed)
+    assert.ok(existsSync(join(repo.dir, "wip.ts")));
+    assert.equal(readFileSync(join(repo.dir, "wip.ts"), "utf-8"), "const draft = true;\n");
   });
 });
 

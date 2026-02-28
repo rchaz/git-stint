@@ -26,6 +26,14 @@ export interface SessionManifest {
   changesets: Changeset[];
   /** Files tracked since last commit. */
   pending: string[];
+  /**
+   * Opaque identifier for the client that owns this session.
+   * Used by hooks to route writes to the correct worktree when multiple
+   * sessions are active (e.g., two Claude Code instances). Typically the
+   * PPID of the hook process, which equals the Claude Code Node.js PID.
+   * Optional for backward compatibility with existing manifests.
+   */
+  clientId?: string;
 }
 
 const MANIFEST_VERSION = 1;
