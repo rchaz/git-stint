@@ -194,6 +194,30 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
     linkedDirs.push(dir);
   }
 
+  // Prevent shared_dirs symlinks from being staged by `git add -A`.
+  // .gitignore rules with trailing slash (e.g., "backend/data/") only match directories,
+  // NOT symlinks. Symlinks are files with mode 120000 in git. We must add entries WITHOUT
+  // trailing slash so git ignores both the directory (in main) and the symlink (in worktree).
+  if (linkedDirs.length > 0) {
+    const gitignorePath = join(worktreeAbs, ".gitignore");
+    const marker = "# git-stint shared_dirs (auto-generated, do not commit)";
+    let content = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+    if (!content.includes(marker)) {
+      const entries = linkedDirs.map((d) => `${d}`).join("\n");
+      const block = `\n${marker}\n${entries}\n`;
+      content = content.endsWith("\n") ? content + block : content + "\n" + block;
+      writeFileSync(gitignorePath, content);
+      // Immediately unstage the symlinks if they were already tracked
+      for (const d of linkedDirs) {
+        try {
+          git.gitInDir(worktreeAbs, "rm", "--cached", "--ignore-unmatch", "-r", d);
+        } catch {
+          // best effort — may not be tracked
+        }
+      }
+    }
+  }
+
   // Revoke main-branch write pass when entering session mode
   removeAllowMainFlag();
 
