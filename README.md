@@ -26,16 +26,6 @@ git-stint solves this with ~1,500 lines of TypeScript on top of standard git pri
 
 ## Install
 
-The easiest way to set up git-stint is to ask Claude Code:
-
-```
-You: set up git-stint for me
-```
-
-Claude Code will follow the [setup instructions in CLAUDE.md](.claude/CLAUDE.md) to install, configure hooks, and create a `.stint.json` for your project.
-
-### Manual install
-
 ```bash
 # From npm
 npm install -g git-stint
@@ -47,6 +37,8 @@ npm install
 npm run build
 npm link
 ```
+
+After installing, see [Claude Code Integration](#claude-code-integration) to set up hooks. You can ask Claude Code to help with that step: `"install git-stint hooks and create a .stint.json for this project"`.
 
 ## Quick Start
 
