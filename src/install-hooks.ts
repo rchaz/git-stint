@@ -4,9 +4,12 @@
  * Hooks installed:
  *   PreToolUse (Write/Edit): Track files written in session worktrees.
  *   Stop: Commit pending changes as WIP checkpoint.
+ *
+ * Also installs:
+ *   .claude/rules/git-stint.md: Workflow instructions for Claude Code.
  */
 
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 
 /** Hook command names owned by git-stint. */
@@ -84,9 +87,10 @@ export function install(scope: "project" | "user"): void {
   console.log("  PreToolUse (Write/Edit): track files in session worktrees");
   console.log("  Stop: commit pending changes as WIP checkpoint");
 
-  // Scaffold .stint.json with defaults if it doesn't exist
+  // Scaffold .stint.json and .claude/rules/git-stint.md if they don't exist
   if (scope === "project") {
     scaffoldConfig(process.cwd());
+    scaffoldRules(process.cwd());
   }
 }
 
@@ -97,6 +101,34 @@ const DEFAULT_CONFIG = {
   adopt_changes: "always",
 };
 
+const RULES_FILENAME = "git-stint.md";
+
+const RULES_CONTENT = `# Git Stint Workflow
+
+All file edits are intercepted by git-stint hooks and redirected to isolated
+worktrees. One stint session = one branch = one PR.
+
+## Session Lifecycle
+
+- Session auto-creates on first Write/Edit (via PreToolUse hook).
+- All edits redirect to \`.stint/<session>/\` worktree.
+- \`git stint commit -m "msg"\` to commit logical units of work.
+- \`git stint pr\` to push and create PR.
+- \`git stint end\` ONLY after ALL related work is done.
+
+## Rules
+
+- Do NOT call \`git stint end\` until all changes are committed (code, tests,
+  config updates, follow-up tasks). Premature \`end\` kills the session; the
+  next edit auto-creates a NEW session, fragmenting work across multiple PRs.
+- Sub-agents share the same session (same PPID). No special handling needed.
+- Files outside the repo bypass hooks — edit freely.
+- Gitignored files bypass hooks — edit freely.
+- Directories listed under \`shared_dirs\` in \`.stint.json\` are symlinked into
+  worktrees pointing to the main repo's real directories. They must never be
+  staged or committed. The hooks auto-add them to the worktree's \`.gitignore\`.
+`;
+
 function scaffoldConfig(repoRoot: string): void {
   const configPath = join(repoRoot, ".stint.json");
   if (existsSync(configPath)) {
@@ -105,6 +137,28 @@ function scaffoldConfig(repoRoot: string): void {
   const content = JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n";
   writeFileSync(configPath, content);
   console.log(`\nConfig created: ${configPath}`);
+}
+
+function scaffoldRules(repoRoot: string): void {
+  const rulesDir = join(repoRoot, ".claude", "rules");
+  const rulesPath = join(rulesDir, RULES_FILENAME);
+  if (existsSync(rulesPath)) {
+    return;
+  }
+  if (!existsSync(rulesDir)) {
+    mkdirSync(rulesDir, { recursive: true });
+  }
+  writeFileSync(rulesPath, RULES_CONTENT);
+  console.log(`\nRules created: ${rulesPath}`);
+}
+
+function removeRules(repoRoot: string): void {
+  const rulesPath = join(repoRoot, ".claude", "rules", RULES_FILENAME);
+  if (!existsSync(rulesPath)) {
+    return;
+  }
+  unlinkSync(rulesPath);
+  console.log(`Removed rules file: ${rulesPath}`);
 }
 
 /** Check if a hook entry (old or new format) contains a stint command. */
@@ -167,4 +221,9 @@ export function uninstall(scope: "project" | "user"): void {
   renameSync(tmp, settingsPath);
 
   console.log(`Removed ${removed} git-stint hook(s) from ${settingsPath}`);
+
+  // Clean up rules file
+  if (scope === "project") {
+    removeRules(process.cwd());
+  }
 }
