@@ -26,19 +26,38 @@ git-stint solves this with ~1,500 lines of TypeScript on top of standard git pri
 
 ## Install
 
+### With Claude Code (recommended)
+
+Tell Claude Code:
+
+> Install git-stint globally (`npm install -g git-stint`), set up hooks for this repo, and create a .stint.json
+
+Claude Code will:
+1. Run `npm install -g git-stint`
+2. Run `git stint install-hooks` (writes to `.claude/settings.json`)
+3. Create a `.stint.json` with your preferred `main_branch_policy`
+
+### Manual install
+
 ```bash
-# From npm
-npm install -g git-stint
-
-# Or from source
+# 1. Install
+npm install -g git-stint       # from npm
+# — or from source —
 git clone https://github.com/rchaz/git-stint.git
-cd git-stint
-npm install
-npm run build
-npm link
-```
+cd git-stint && npm install && npm run build && npm link
 
-After installing, see [Claude Code Integration](#claude-code-integration) to set up hooks. You can ask Claude Code to help with that step: `"install git-stint hooks and create a .stint.json for this project"`.
+# 2. Set up hooks in your project
+cd /path/to/your/repo
+git stint install-hooks
+
+# 3. Configure (optional)
+cat > .stint.json << 'EOF'
+{
+  "shared_dirs": [],
+  "main_branch_policy": "prompt"
+}
+EOF
+```
 
 ## Quick Start
 
