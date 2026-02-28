@@ -82,7 +82,7 @@ git stint end
 | `git stint test [-- cmd]` | Run tests in the session worktree |
 | `git stint test --combine A B` | Test multiple sessions merged together |
 | `git stint prune` | Clean up orphaned worktrees/branches |
-| `git stint allow-main` | Allow writes to main branch (until next session start) |
+| `git stint allow-main` | Allow writes to main branch (scoped to this Claude Code session) |
 | `git stint install-hooks` | Install Claude Code hooks |
 | `git stint uninstall-hooks` | Remove Claude Code hooks |
 
@@ -143,7 +143,7 @@ Controls what happens when Claude Code (or another agent) tries to write directl
 - **`"prompt"`** (default) — Blocks with a message: "run `git stint allow-main` or `git stint start`". Lets you choose per-situation.
 - **`"allow"`** — Passes through silently. Hooks still track files in existing worktrees, but don't enforce session usage.
 
-The `git stint allow-main` command creates a temporary flag (`.git/stint-main-allowed`) that permits main-branch writes. The flag is automatically revoked the next time you run `git stint start`.
+The `git stint allow-main --client-id <PID>` command creates a per-process flag file (`.git/stint-main-allowed-<PID>`) that permits main-branch writes for that specific Claude Code instance only. Other instances remain blocked. The hook's block message includes the exact command with the correct `--client-id`. Stale flags from dead processes are cleaned up by `git stint prune`.
 
 ### Adopting Uncommitted Changes
 

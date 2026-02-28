@@ -54,7 +54,7 @@ Always build before testing — tests import from `dist/`.
 
 - **shared_dirs**: Symlinks from worktree to main repo for gitignored dirs (caches, data). Created on `start()`, unlinked before `cleanup()`.
 - **main_branch_policy**: `"block"` (auto-session), `"prompt"` (check flag), `"allow"` (pass through). Enforced by the PreToolUse hook.
-- **allow-main flag**: `.git/stint-main-allowed` — created by `allowMain()`, revoked on `start()`.
+- **allow-main flag**: `.git/stint-main-allowed-<PID>` — per-client flag created by `allowMain(clientId?)`. Scoped to a single Claude Code instance via PID. Stale flags cleaned by `prune()`.
 - **adopt changes**: `start()` stashes uncommitted changes from main, pops into worktree. Stash happens before symlink creation to avoid conflicts.
 - **clientId**: Session affinity via `$PPID`. Each Claude Code instance maps to its own session.
 

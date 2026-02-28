@@ -277,7 +277,7 @@ Commands:
   test [-- <cmd>]           Run tests in the session worktree
   test --combine A B        Test multiple sessions merged together
   prune                     Clean up orphaned worktrees/branches
-  allow-main                Allow writes to main branch (until next session start)
+  allow-main                Allow writes to main branch (scoped to this client session)
   install-hooks [--user]    Install Claude Code hooks
   uninstall-hooks [--user]  Remove Claude Code hooks
 
