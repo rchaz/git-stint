@@ -194,7 +194,7 @@ try {
     }
 
     case "allow-main": {
-      session.allowMain();
+      session.allowMain(getFlag("--client-id"));
       break;
     }
 

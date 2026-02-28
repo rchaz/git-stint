@@ -687,6 +687,9 @@ export function prune(): void {
     }
   } catch { /* no stint branches */ }
 
+  // Clean up stale allow-main flags from dead processes
+  pruneAllowMainFlags();
+
   if (cleaned === 0) {
     console.log("Nothing to clean up.");
   } else {
@@ -754,24 +757,51 @@ function cleanup(manifest: SessionManifest, force = false): void {
 
 // --- Allow-main flag ---
 
-const ALLOW_MAIN_FLAG = "stint-main-allowed";
+const ALLOW_MAIN_PREFIX = "stint-main-allowed-";
 
-function getAllowMainPath(): string {
+function getAllowMainPath(pid: number): string {
   const commonDir = resolve(git.getGitCommonDir());
-  return join(commonDir, ALLOW_MAIN_FLAG);
+  return join(commonDir, `${ALLOW_MAIN_PREFIX}${pid}`);
 }
 
 function removeAllowMainFlag(): void {
-  const flagPath = getAllowMainPath();
+  // Remove flag for current process tree only (called from `start`)
+  const flagPath = getAllowMainPath(process.ppid);
   if (existsSync(flagPath)) unlinkSync(flagPath);
 }
 
-/** Create flag file allowing writes to main branch. Revoked on next `git stint start`. */
-export function allowMain(): void {
+/** Clean up allow-main flags for PIDs that are no longer running. */
+export function pruneAllowMainFlags(): void {
+  const commonDir = resolve(git.getGitCommonDir());
+  const entries = readdirSync(commonDir).filter((e) => e.startsWith(ALLOW_MAIN_PREFIX));
+  let cleaned = 0;
+  for (const entry of entries) {
+    const pid = parseInt(entry.slice(ALLOW_MAIN_PREFIX.length), 10);
+    if (isNaN(pid)) { unlinkSync(join(commonDir, entry)); cleaned++; continue; }
+    try {
+      process.kill(pid, 0); // signal 0 = existence check, no actual signal
+    } catch {
+      // Process doesn't exist — stale flag
+      unlinkSync(join(commonDir, entry));
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) console.log(`Cleaned ${cleaned} stale allow-main flag(s).`);
+}
+
+/**
+ * Create per-process flag file allowing writes to main branch.
+ * Scoped to a client ID (typically Claude Code's PID), so other
+ * instances remain blocked.
+ *
+ * @param clientId - Explicit client ID. If not provided, falls back to process.ppid.
+ */
+export function allowMain(clientId?: string): void {
   if (!git.isInsideGitRepo()) {
     throw new Error("Not inside a git repository.");
   }
-  const flagPath = getAllowMainPath();
+  const id = clientId || String(process.ppid);
+  const flagPath = getAllowMainPath(Number(id));
   writeFileSync(flagPath, new Date().toISOString() + "\n");
-  console.log("Main branch writes allowed (until next `git stint start`).");
+  console.log(`Main branch writes allowed for this session (client ${id}).`);
 }

@@ -141,12 +141,12 @@ if [ "$MAIN_BRANCH_POLICY" = "allow" ]; then
 fi
 
 if [ "$MAIN_BRANCH_POLICY" = "prompt" ]; then
-  # Check for allow-main flag file
-  if [ -f "$GIT_COMMON_DIR/stint-main-allowed" ]; then
+  # Check for per-process allow-main flag (scoped to this Claude Code instance via PPID)
+  if [ -n "$CLIENT_ID" ] && [ -f "$GIT_COMMON_DIR/stint-main-allowed-${CLIENT_ID}" ]; then
     exit 0
   fi
   echo "BLOCKED: Writing to main branch." >&2
-  echo "To allow, run: git stint allow-main" >&2
+  echo "To allow, run: git stint allow-main --client-id $CLIENT_ID" >&2
   echo "To create a session instead, run: git stint start <name>" >&2
   exit 2
 fi
