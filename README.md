@@ -26,6 +26,16 @@ git-stint solves this with ~1,500 lines of TypeScript on top of standard git pri
 
 ## Install
 
+The easiest way to set up git-stint is to ask Claude Code:
+
+```
+You: set up git-stint for me
+```
+
+Claude Code will follow the [setup instructions in CLAUDE.md](.claude/CLAUDE.md) to install, configure hooks, and create a `.stint.json` for your project.
+
+### Manual install
+
 ```bash
 # From npm
 npm install -g git-stint
@@ -82,14 +92,14 @@ git stint end
 | `git stint test [-- cmd]` | Run tests in the session worktree |
 | `git stint test --combine A B` | Test multiple sessions merged together |
 | `git stint prune` | Clean up orphaned worktrees/branches |
-| `git stint allow-main` | Allow writes to main branch (scoped to this Claude Code session) |
+| `git stint allow-main [--client-id <PID>]` | Allow writes to main branch (scoped to one process/session) |
 | `git stint install-hooks` | Install Claude Code hooks |
 | `git stint uninstall-hooks` | Remove Claude Code hooks |
 
 ### Options
 
 - `--session <name>` — Specify which session (auto-detected from CWD)
-- `--client-id <id>` — Tag session with a client identifier (used by hooks)
+- `--client-id <id>` — Client identifier (used by hooks). For `start`, tags the session. For `allow-main`, scopes the flag to that client.
 - `--adopt` / `--no-adopt` — Override `adopt_changes` config for this start
 - `-m "message"` — Commit or squash message
 - `--title "title"` — PR title
@@ -140,10 +150,18 @@ The directories listed in `shared_dirs` should typically be gitignored, since th
 Controls what happens when Claude Code (or another agent) tries to write directly to the main branch while hooks are installed:
 
 - **`"block"`** — Auto-creates a session and blocks the write, forcing the agent to work in the worktree. This is the most protective mode.
-- **`"prompt"`** (default) — Blocks with a message: "run `git stint allow-main` or `git stint start`". Lets you choose per-situation.
+- **`"prompt"`** (default) — Blocks with a message that includes the exact command to unblock, e.g. `git stint allow-main --client-id 56193`. Lets you choose per-situation.
 - **`"allow"`** — Passes through silently. Hooks still track files in existing worktrees, but don't enforce session usage.
 
-The `git stint allow-main --client-id <PID>` command creates a per-process flag file (`.git/stint-main-allowed-<PID>`) that permits main-branch writes for that specific Claude Code instance only. Other instances remain blocked. The hook's block message includes the exact command with the correct `--client-id`. Stale flags from dead processes are cleaned up by `git stint prune`.
+The `allow-main` flag is scoped per-process. When the hook blocks a write, it prints the exact command with the correct `--client-id` (the Claude Code instance's PID). Running that command creates `.git/stint-main-allowed-<PID>`, which only unblocks that specific instance. Other Claude Code sessions remain blocked.
+
+**Important:** Always use the `--client-id` value from the hook's block message. Running `allow-main` without `--client-id` from a separate terminal will NOT unblock Claude Code (different process tree). The intended flow is:
+
+1. Hook blocks Claude's write and prints: `git stint allow-main --client-id <PID>`
+2. Claude (or the user telling Claude) runs that exact command
+3. Claude retries the write — it succeeds
+
+Stale flags from dead processes are cleaned up by `git stint prune`.
 
 ### Adopting Uncommitted Changes
 
@@ -199,6 +217,8 @@ git stint install-hooks --user
 
 ### Workflow with Claude Code
 
+**Option A: Session-based (isolated branch)**
+
 ```bash
 # Start a session before asking Claude to work
 git stint start my-feature
@@ -213,6 +233,18 @@ git stint end
 ```
 
 Or let the hooks auto-create sessions — just start coding with Claude and the hook will create a session on the first write (when `main_branch_policy` is `"block"`).
+
+**Option B: Quick edits on main (allow-main)**
+
+For small changes that don't need a branch, the hook blocks and tells Claude exactly what to run:
+
+```
+BLOCKED: Writing to main branch.
+To allow, run: git stint allow-main --client-id 56193
+To create a session instead, run: git stint start <name>
+```
+
+Claude runs the printed command, then retries the write — it succeeds. The flag only applies to that specific Claude Code session. Other instances stay blocked.
 
 ## How It Works
 
