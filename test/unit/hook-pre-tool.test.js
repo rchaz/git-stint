@@ -12,15 +12,14 @@ import { existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { createTempRepo } from "../helpers/temp-repo.js";
 
-const HOOK_PATH = resolve(
-  import.meta.dirname,
-  "..",
-  "..",
-  "adapters",
-  "claude-code",
-  "hooks",
-  "git-stint-hook-pre-tool",
-);
+const PROJECT_ROOT = resolve(import.meta.dirname, "..", "..");
+
+const HOOK_PATH = join(PROJECT_ROOT, "adapters", "claude-code", "hooks", "git-stint-hook-pre-tool");
+
+// Ensure the project's bin/ is on PATH so the hook can find `git-stint`.
+// In CI, git-stint is not installed globally — it's only available via the local bin/.
+const BIN_PATH = join(PROJECT_ROOT, "bin");
+const TEST_ENV = { ...process.env, PATH: `${BIN_PATH}:${process.env.PATH}` };
 
 /**
  * Run the PreToolUse hook with a given file_path.
@@ -34,6 +33,7 @@ function runHook(filePath, cwd) {
       cwd,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
+      env: TEST_ENV,
     });
     return { exitCode: 0, stderr: "", stdout };
   } catch (err) {
@@ -252,6 +252,7 @@ describe("hook: policy enforcement (non-gitignored files)", () => {
         cwd: repo.dir,
         encoding: "utf-8",
         stdio: ["pipe", "pipe", "pipe"],
+        env: TEST_ENV,
       });
     } catch (err) {
       assert.fail(`hook should allow when no file_path: exit ${err.status}`);
