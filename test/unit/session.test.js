@@ -656,6 +656,63 @@ describe("adopt uncommitted changes", () => {
 
     end("adopt-modified");
   });
+
+  it("--no-adopt leaves changes on main", () => {
+    writeFileSync(join(repo.dir, "wip.txt"), "stay here\n");
+
+    start("no-adopt-test", undefined, false);
+
+    // Changes should still be on main
+    assert.ok(existsSync(join(repo.dir, "wip.txt")));
+    assert.equal(readFileSync(join(repo.dir, "wip.txt"), "utf-8"), "stay here\n");
+
+    const m = loadManifest("no-adopt-test");
+    const wt = getWorktreePath(m);
+    // File should NOT be in worktree (it's untracked and wasn't adopted)
+    assert.ok(!existsSync(join(wt, "wip.txt")));
+
+    end("no-adopt-test");
+  });
+
+  it("adopt_changes: never skips adoption", () => {
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({ adopt_changes: "never" }));
+    writeFileSync(join(repo.dir, "wip.txt"), "stay here\n");
+
+    start("never-adopt-test");
+
+    // Changes should still be on main
+    assert.ok(existsSync(join(repo.dir, "wip.txt")));
+
+    end("never-adopt-test");
+  });
+
+  it("adopt_changes: prompt warns without adopting", () => {
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({ adopt_changes: "prompt" }));
+    writeFileSync(join(repo.dir, "wip.txt"), "stay here\n");
+
+    const logs = captureConsole(() => start("prompt-adopt-test"));
+    assert.ok(logs.some((l) => l.includes("uncommitted file(s)")));
+    assert.ok(logs.some((l) => l.includes("--adopt")));
+
+    // Changes should still be on main (not adopted)
+    assert.ok(existsSync(join(repo.dir, "wip.txt")));
+
+    end("prompt-adopt-test");
+  });
+
+  it("--adopt overrides adopt_changes: never", () => {
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({ adopt_changes: "never" }));
+    writeFileSync(join(repo.dir, "wip.txt"), "override\n");
+
+    const logs = captureConsole(() => start("override-adopt-test", undefined, true));
+    assert.ok(logs.some((l) => l.includes("Carried over")));
+
+    const m = loadManifest("override-adopt-test");
+    const wt = getWorktreePath(m);
+    assert.ok(existsSync(join(wt, "wip.txt")));
+
+    end("override-adopt-test");
+  });
 });
 
 describe("allowMain()", () => {

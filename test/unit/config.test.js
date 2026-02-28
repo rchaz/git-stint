@@ -77,4 +77,24 @@ describe("config", () => {
       assert.equal(loadConfig(dir).force_cleanup, cleanup);
     }
   });
+
+  it("defaults adopt_changes to always", () => {
+    const config = loadConfig(dir);
+    assert.equal(config.adopt_changes, "always");
+  });
+
+  it("parses valid adopt_changes values", () => {
+    for (const adopt of ["always", "never", "prompt"]) {
+      writeFileSync(join(dir, ".stint.json"), JSON.stringify({ adopt_changes: adopt }));
+      assert.equal(loadConfig(dir).adopt_changes, adopt);
+    }
+  });
+
+  it("ignores invalid adopt_changes values", () => {
+    writeFileSync(join(dir, ".stint.json"), JSON.stringify({ adopt_changes: "yolo" }));
+    assert.equal(loadConfig(dir).adopt_changes, "always");
+
+    writeFileSync(join(dir, ".stint.json"), JSON.stringify({ adopt_changes: 42 }));
+    assert.equal(loadConfig(dir).adopt_changes, "always");
+  });
 });

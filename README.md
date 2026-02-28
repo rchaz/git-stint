@@ -90,6 +90,7 @@ git stint end
 
 - `--session <name>` — Specify which session (auto-detected from CWD)
 - `--client-id <id>` — Tag session with a client identifier (used by hooks)
+- `--adopt` / `--no-adopt` — Override `adopt_changes` config for this start
 - `-m "message"` — Commit or squash message
 - `--title "title"` — PR title
 - `--version` — Show version number
@@ -106,7 +107,8 @@ Create a `.stint.json` file in your repo root to configure git-stint behavior:
     "backend/logs"
   ],
   "main_branch_policy": "prompt",
-  "force_cleanup": "prompt"
+  "force_cleanup": "prompt",
+  "adopt_changes": "always"
 }
 ```
 
@@ -115,6 +117,7 @@ Create a `.stint.json` file in your repo root to configure git-stint behavior:
 | `shared_dirs` | `string[]` | `[]` | Directories to symlink from worktree to main repo on `start`. Use for gitignored data dirs (caches, build outputs, logs) that shouldn't be duplicated per session. |
 | `main_branch_policy` | `"prompt"` / `"allow"` / `"block"` | `"prompt"` | What happens when writing to main with hooks enabled. `"block"` auto-creates a session. `"allow"` passes through. `"prompt"` blocks with instructions to run `git stint allow-main` or `git stint start`. |
 | `force_cleanup` | `"prompt"` / `"force"` / `"fail"` | `"prompt"` | What happens when non-force worktree removal fails. `"force"` retries with `--force`. `"fail"` throws an error. `"prompt"` retries with force (default, same as previous behavior). |
+| `adopt_changes` | `"always"` / `"never"` / `"prompt"` | `"always"` | What happens when `git stint start` is called with uncommitted changes on main. `"always"` stashes and moves them into the new worktree. `"never"` leaves them on main. `"prompt"` warns and suggests `--adopt` or `--no-adopt`. |
 
 ### Shared Directories
 
@@ -144,12 +147,18 @@ The `git stint allow-main` command creates a temporary flag (`.git/stint-main-al
 
 ### Adopting Uncommitted Changes
 
-When you run `git stint start` with uncommitted changes on main, git-stint automatically:
-1. Stashes the changes (staged + unstaged + untracked)
-2. Pops the stash into the new worktree
-3. Leaves main clean
+When you run `git stint start` with uncommitted changes on main, behavior depends on `adopt_changes`:
 
-This means you can start editing on main, then decide to create a session — your work carries over seamlessly.
+- **`"always"`** (default) — Stashes changes (staged + unstaged + untracked), pops them into the new worktree, leaves main clean. Your work carries over seamlessly.
+- **`"never"`** — Leaves uncommitted changes on main. The new worktree starts clean.
+- **`"prompt"`** — Warns about uncommitted changes and suggests using `--adopt` or `--no-adopt`.
+
+CLI flags override the config for a single invocation:
+
+```bash
+git stint start my-feature --adopt       # Force adopt (overrides "never")
+git stint start my-feature --no-adopt    # Force skip (overrides "always")
+```
 
 ## Claude Code Integration
 

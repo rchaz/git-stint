@@ -113,7 +113,7 @@ function warnIfInsideWorktree(worktree: string): void {
 
 // --- Commands ---
 
-export function start(name?: string, clientId?: string): void {
+export function start(name?: string, clientId?: string, adoptOverride?: boolean): void {
   if (!git.isInsideGitRepo()) {
     throw new Error("Not inside a git repository.");
   }
@@ -151,22 +151,31 @@ export function start(name?: string, clientId?: string): void {
 
   // Adopt uncommitted changes from main repo (before symlinking, to avoid conflicts)
   const config = loadConfig(topLevel);
+  const shouldAdopt = adoptOverride !== undefined
+    ? adoptOverride
+    : config.adopt_changes === "always";
   let adoptedFiles = 0;
   if (git.hasUncommittedChanges(topLevel)) {
     const statusOutput = git.statusShort(topLevel);
-    adoptedFiles = statusOutput.split("\n").filter(Boolean).length;
-    try {
-      git.stash(topLevel);
+    const fileCount = statusOutput.split("\n").filter(Boolean).length;
+
+    if (adoptOverride === undefined && config.adopt_changes === "prompt") {
+      console.warn(`Warning: ${fileCount} uncommitted file(s) on main. Use --adopt to carry them over, or --no-adopt to leave them.`);
+    } else if (shouldAdopt) {
+      adoptedFiles = fileCount;
       try {
-        git.stashPop(worktreeAbs);
+        git.stash(topLevel);
+        try {
+          git.stashPop(worktreeAbs);
+        } catch {
+          // Stash pop failed — restore stash to main repo
+          console.warn("Warning: Could not apply uncommitted changes to worktree. Stash preserved in main repo.");
+          try { git.stashPop(topLevel); } catch { /* leave stash intact */ }
+        }
       } catch {
-        // Stash pop failed — restore stash to main repo
-        console.warn("Warning: Could not apply uncommitted changes to worktree. Stash preserved in main repo.");
-        try { git.stashPop(topLevel); } catch { /* leave stash intact */ }
+        // Nothing to stash (git stash can fail if changes are only untracked and gitignored)
+        adoptedFiles = 0;
       }
-    } catch {
-      // Nothing to stash (git stash can fail if changes are only untracked and gitignored)
-      adoptedFiles = 0;
     }
   }
 

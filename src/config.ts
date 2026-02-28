@@ -5,16 +5,19 @@ export interface StintConfig {
   shared_dirs: string[];
   main_branch_policy: "prompt" | "allow" | "block";
   force_cleanup: "prompt" | "force" | "fail";
+  adopt_changes: "always" | "never" | "prompt";
 }
 
 const DEFAULTS: StintConfig = {
   shared_dirs: [],
   main_branch_policy: "prompt",
   force_cleanup: "prompt",
+  adopt_changes: "always",
 };
 
 const VALID_POLICIES = new Set(["prompt", "allow", "block"]);
 const VALID_CLEANUP = new Set(["prompt", "force", "fail"]);
+const VALID_ADOPT = new Set(["always", "never", "prompt"]);
 
 /**
  * Load .stint.json from repo root. Returns defaults if file missing or invalid.
@@ -47,6 +50,10 @@ export function loadConfig(repoRoot: string): StintConfig {
 
   if (typeof obj.force_cleanup === "string" && VALID_CLEANUP.has(obj.force_cleanup)) {
     config.force_cleanup = obj.force_cleanup as StintConfig["force_cleanup"];
+  }
+
+  if (typeof obj.adopt_changes === "string" && VALID_ADOPT.has(obj.adopt_changes)) {
+    config.adopt_changes = obj.adopt_changes as StintConfig["adopt_changes"];
   }
 
   return config;

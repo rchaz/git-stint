@@ -70,7 +70,10 @@ try {
     case "start": {
       const name = getPositional(0);
       const clientId = getFlag("--client-id");
-      session.start(name, clientId);
+      const adoptOverride = args.includes("--adopt") ? true
+        : args.includes("--no-adopt") ? false
+        : undefined;
+      session.start(name, clientId, adoptOverride);
       break;
     }
 
@@ -281,6 +284,7 @@ Commands:
 Options:
   --session <name>          Specify session (auto-detected from CWD)
   --client-id <id>          Tag session with a client identifier (used by hooks)
+  --adopt / --no-adopt      Override adopt_changes config for this start
   -m "message"              Commit/squash message
   --title "title"           PR title
   --version                 Show version number
