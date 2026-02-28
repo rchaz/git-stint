@@ -27,7 +27,7 @@ Always build before testing — tests import from `dist/`.
 | `src/test-session.ts` | Worktree-based testing + combined testing |
 | `src/cli.ts` | Entry point, argument parsing, command dispatch |
 | `src/install-hooks.ts` | Claude Code hook installation/removal |
-| `adapters/claude-code/hooks/git-stint-hook-pre-tool` | PreToolUse hook (bash) — reads `.stint.json`, enforces main_branch_policy |
+| `adapters/claude-code/hooks/git-stint-hook-pre-tool` | PreToolUse hook (bash) — reads `.stint.json`, enforces main_branch_policy, skips gitignored files |
 | `adapters/claude-code/hooks/git-stint-hook-stop` | Stop hook (bash) — auto-commits WIP on conversation end |
 
 ## Coding Rules
@@ -43,8 +43,8 @@ Always build before testing — tests import from `dist/`.
 ## When Making Changes
 
 1. `npm run build` to check compilation
-2. `npm run test:all` to verify all tests pass (129 tests across unit, security, integration)
-3. New commands need tests in `test/unit/session.test.js`
+2. `npm run test:all` to verify all tests pass
+3. New commands need tests in `test/unit/session.test.js`; hook changes need tests in `test/unit/hook-pre-tool.test.js`
 4. Config-related changes need tests in `test/unit/config.test.js`
 5. Git operations go through `src/git.ts` — don't call git directly
 6. Manifest changes must be backward compatible

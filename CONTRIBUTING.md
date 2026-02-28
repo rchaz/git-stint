@@ -6,7 +6,6 @@ Thanks for your interest in contributing! git-stint is a small, focused tool —
 
 - [Issues](https://github.com/rchaz/git-stint/issues) — Bug reports and feature requests
 - [README](README.md) — Usage and commands
-- [PROPOSAL](PROPOSAL-git-session.md) — Design rationale and architecture
 
 ## Reporting Bugs
 
@@ -56,14 +55,18 @@ npm run test:all          # Everything
 ```
 test/
 ├── helpers/
-│   └── temp-repo.js      # Creates disposable git repos
+│   └── temp-repo.js           # Creates disposable git repos
 ├── unit/
-│   ├── manifest.test.js   # Manifest CRUD + session resolution
-│   └── session.test.js    # All session commands
+│   ├── cli.test.js             # CLI arg parsing, hook installation
+│   ├── config.test.js          # Config loading + validation
+│   ├── hook-pre-tool.test.js   # PreToolUse hook (gitignore, policy enforcement)
+│   ├── manifest.test.js        # Manifest CRUD + session resolution
+│   ├── session.test.js         # All session commands
+│   └── test-session.test.js    # Worktree-based test execution
 ├── security/
-│   └── validation.test.js # Injection prevention, name validation
+│   └── validation.test.js      # Injection prevention, name validation
 └── integration/
-    └── lifecycle.test.js   # Full start → commit → squash → end flows
+    └── lifecycle.test.js        # Full start → commit → squash → end flows
 ```
 
 Each test creates a temporary git repo, runs operations, and cleans up. Tests are isolated — no shared state.
@@ -72,17 +75,18 @@ Each test creates a temporary git repo, runs operations, and cleans up. Tests ar
 
 ```
 src/
-├── git.ts           # Git plumbing (execFileSync wrappers)
-├── manifest.ts      # Session state: JSON in .git/sessions/
-├── session.ts       # Commands: start, commit, squash, pr, end...
-├── conflicts.ts     # Cross-session file overlap detection
-├── test-session.ts  # Worktree-based test execution
-└── cli.ts           # Entry point, arg parsing
+├── git.ts              # Git plumbing (execFileSync wrappers)
+├── manifest.ts         # Session state: JSON in .git/sessions/
+├── session.ts          # Commands: start, commit, squash, pr, end...
+├── config.ts           # .stint.json loading + validation
+├── conflicts.ts        # Cross-session file overlap detection
+├── test-session.ts     # Worktree-based test execution
+├── install-hooks.ts    # Claude Code hook installation/removal
+└── cli.ts              # Entry point, arg parsing
 
 adapters/
 └── claude-code/
-    ├── hooks/       # PreToolUse + Stop hook scripts
-    └── install.ts   # Hook installer for .claude/settings.json
+    └── hooks/          # PreToolUse + Stop hook scripts (bash)
 
 test/                # All tests (see above)
 ```

@@ -16,7 +16,7 @@ AI coding agents (Claude Code, Cursor, Copilot) edit files but have no clean way
 3. **Produce clean commits** — agent work should result in reviewable, mergeable PRs
 4. **Test in isolation** — verify one session's changes without interference
 
-git-stint solves this with ~1,500 lines of TypeScript on top of standard git primitives.
+git-stint solves this with ~2,000 lines of TypeScript + bash on top of standard git primitives.
 
 ## Prerequisites
 
@@ -193,7 +193,7 @@ git stint start my-feature --no-adopt    # Force skip (overrides "always")
 
 git-stint includes hooks that make it work seamlessly with [Claude Code](https://docs.anthropic.com/en/docs/claude-code):
 
-- **PreToolUse hook**: When Claude writes/edits a file inside a session worktree, the file is automatically tracked. If Claude tries to write to the main repo, behavior depends on `main_branch_policy` in `.stint.json`.
+- **PreToolUse hook**: When Claude writes/edits a file inside a session worktree, the file is automatically tracked. If Claude tries to write to the main repo, behavior depends on `main_branch_policy` in `.stint.json`. Writes to gitignored files (e.g. `node_modules/`, `dist/`, `.env`) are always allowed through — they can't be committed, so they don't need branch isolation.
 - **Stop hook**: When a Claude Code conversation ends, pending changes are auto-committed as a WIP checkpoint.
 - **Session affinity**: Each Claude Code instance is mapped to its own session via `clientId` (process ID). Multiple Claude instances can work in parallel without hijacking each other's sessions.
 
@@ -329,13 +329,13 @@ Combined testing creates a temporary octopus merge of the specified sessions, ru
 |------|---------|-------|
 | `src/git.ts` | Git command wrapper (`execFileSync`) | ~180 |
 | `src/manifest.ts` | Session state CRUD in `.git/sessions/` | ~200 |
-| `src/session.ts` | Core commands (start, commit, squash, pr, end...) | ~770 |
-| `src/config.ts` | `.stint.json` loading and validation | ~55 |
+| `src/session.ts` | Core commands (start, commit, squash, pr, end...) | ~830 |
+| `src/config.ts` | `.stint.json` loading and validation | ~60 |
 | `src/conflicts.ts` | Cross-session file overlap detection | ~55 |
 | `src/test-session.ts` | Worktree-based testing + combined testing | ~140 |
 | `src/cli.ts` | Entry point, argument parsing | ~300 |
-| `src/install-hooks.ts` | Claude Code hook installation/removal | ~150 |
-| `adapters/claude-code/hooks/` | Bash hooks (PreToolUse + Stop) | ~210 |
+| `src/install-hooks.ts` | Claude Code hook installation/removal | ~170 |
+| `adapters/claude-code/hooks/` | Bash hooks (PreToolUse + Stop) | ~220 |
 
 ### Design Decisions
 
@@ -358,7 +358,7 @@ Combined testing creates a temporary octopus merge of the specified sessions, ru
 | Merge engine | Git's built-in | Custom hunk-level engine |
 | Git compatibility | Full — all git tools work | Partial — writes break state |
 | State | JSON manifests (disposable) | SQLite + TOML (can corrupt) |
-| Code size | ~1,500 lines TypeScript | ~100k+ lines Rust |
+| Code size | ~2,000 lines TypeScript + bash | ~100k+ lines Rust |
 | Dependencies | git, gh (optional) | Tauri desktop app |
 
 git-stint is designed for AI agent workflows where sessions are independent and short-lived. GitButler is a full-featured branch management GUI for teams.
