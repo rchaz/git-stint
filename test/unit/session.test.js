@@ -728,14 +728,14 @@ describe("allowMain()", () => {
   it("creates flag file in .git", () => {
     allowMain();
     const commonDir = git.getGitCommonDir();
-    const flagPath = join(commonDir, "stint-main-allowed");
+    const flagPath = join(commonDir, `stint-main-allowed-${process.ppid}`);
     assert.ok(existsSync(flagPath));
   });
 
   it("flag is removed when starting a session", () => {
     allowMain();
     const commonDir = git.getGitCommonDir();
-    const flagPath = join(commonDir, "stint-main-allowed");
+    const flagPath = join(commonDir, `stint-main-allowed-${process.ppid}`);
     assert.ok(existsSync(flagPath));
 
     start("revoke-test");

@@ -83,6 +83,28 @@ export function install(scope: "project" | "user"): void {
   console.log("\nHooks added:");
   console.log("  PreToolUse (Write/Edit): track files in session worktrees");
   console.log("  Stop: commit pending changes as WIP checkpoint");
+
+  // Scaffold .stint.json with defaults if it doesn't exist
+  if (scope === "project") {
+    scaffoldConfig(process.cwd());
+  }
+}
+
+const DEFAULT_CONFIG = {
+  shared_dirs: [],
+  main_branch_policy: "prompt",
+  force_cleanup: "prompt",
+  adopt_changes: "always",
+};
+
+function scaffoldConfig(repoRoot: string): void {
+  const configPath = join(repoRoot, ".stint.json");
+  if (existsSync(configPath)) {
+    return;
+  }
+  const content = JSON.stringify(DEFAULT_CONFIG, null, 2) + "\n";
+  writeFileSync(configPath, content);
+  console.log(`\nConfig created: ${configPath}`);
 }
 
 /** Check if a hook entry (old or new format) contains a stint command. */

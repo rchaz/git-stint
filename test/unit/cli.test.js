@@ -282,4 +282,61 @@ describe("install-hooks / uninstall-hooks", () => {
       process.chdir(origCwd);
     }
   });
+
+  it("install scaffolds .stint.json with defaults when missing", async () => {
+    const { install } = await import("../../dist/install-hooks.js");
+
+    const origCwd = process.cwd();
+    process.chdir(tmpDir);
+    try {
+      install("project");
+
+      const configPath = join(tmpDir, ".stint.json");
+      assert.ok(existsSync(configPath), ".stint.json should be created");
+      const config = JSON.parse(readFileSync(configPath, "utf-8"));
+      assert.deepStrictEqual(config.shared_dirs, []);
+      assert.equal(config.main_branch_policy, "prompt");
+      assert.equal(config.force_cleanup, "prompt");
+      assert.equal(config.adopt_changes, "always");
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+
+  it("install does not overwrite existing .stint.json", async () => {
+    const { install } = await import("../../dist/install-hooks.js");
+
+    const origCwd = process.cwd();
+    process.chdir(tmpDir);
+    try {
+      // Write custom config before install
+      const configPath = join(tmpDir, ".stint.json");
+      const custom = { main_branch_policy: "block", shared_dirs: ["data"] };
+      writeFileSync(configPath, JSON.stringify(custom));
+
+      install("project");
+
+      // Verify custom config was preserved
+      const config = JSON.parse(readFileSync(configPath, "utf-8"));
+      assert.equal(config.main_branch_policy, "block");
+      assert.deepStrictEqual(config.shared_dirs, ["data"]);
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
+
+  it("install with --user scope does not scaffold .stint.json", async () => {
+    const { install } = await import("../../dist/install-hooks.js");
+
+    const origCwd = process.cwd();
+    process.chdir(tmpDir);
+    try {
+      install("user");
+
+      const configPath = join(tmpDir, ".stint.json");
+      assert.ok(!existsSync(configPath), ".stint.json should not be created for user scope");
+    } finally {
+      process.chdir(origCwd);
+    }
+  });
 });
