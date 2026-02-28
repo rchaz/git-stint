@@ -200,20 +200,30 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
   // trailing slash so git ignores both the directory (in main) and the symlink (in worktree).
   if (linkedDirs.length > 0) {
     const gitignorePath = join(worktreeAbs, ".gitignore");
-    const marker = "# git-stint shared_dirs (auto-generated, do not commit)";
+    const markerStart = "# git-stint shared_dirs (auto-generated, do not commit)";
+    const markerEnd = "# end git-stint shared_dirs";
     let content = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
-    if (!content.includes(marker)) {
-      const entries = linkedDirs.map((d) => `${d}`).join("\n");
-      const block = `\n${marker}\n${entries}\n`;
-      content = content.endsWith("\n") ? content + block : content + "\n" + block;
-      writeFileSync(gitignorePath, content);
-      // Immediately unstage the symlinks if they were already tracked
-      for (const d of linkedDirs) {
-        try {
-          git.gitInDir(worktreeAbs, "rm", "--cached", "--ignore-unmatch", "-r", d);
-        } catch {
-          // best effort — may not be tracked
-        }
+    const entries = linkedDirs.map((d) => `${d}`).join("\n");
+    const block = `${markerStart}\n${entries}\n${markerEnd}`;
+
+    if (content.includes(markerStart)) {
+      // Replace existing block with current shared_dirs (handles additions/removals)
+      const regex = new RegExp(
+        `${markerStart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?` +
+        `(?:${markerEnd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}|$)`,
+      );
+      content = content.replace(regex, block);
+    } else {
+      content = content.endsWith("\n") ? content + "\n" + block + "\n" : content + "\n\n" + block + "\n";
+    }
+    writeFileSync(gitignorePath, content);
+
+    // Immediately unstage the symlinks if they were already tracked
+    for (const d of linkedDirs) {
+      try {
+        git.gitInDir(worktreeAbs, "rm", "--cached", "--ignore-unmatch", "-r", d);
+      } catch {
+        // best effort — may not be tracked
       }
     }
   }
