@@ -616,6 +616,15 @@ export function undo(sessionName?: string): void {
   console.log(`${last.files.length} file(s) back to pending.`);
 }
 
+export function which(sessionName?: string, showWorktree?: boolean): void {
+  const manifest = resolveSession(sessionName);
+  if (showWorktree) {
+    console.log(getWorktreePath(manifest));
+  } else {
+    console.log(manifest.name);
+  }
+}
+
 export function list(): void {
   const manifests = listManifests();
   if (manifests.length === 0) {

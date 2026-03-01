@@ -99,6 +99,7 @@ git stint end
 | `git stint end` | Finalize session, clean up everything (deletes remote branch if merged) |
 | `git stint abort` | Discard session — delete all changes |
 | `git stint undo` | Revert last commit, changes become pending |
+| `git stint which [--worktree]` | Print resolved session name (or worktree path) |
 | `git stint conflicts` | Check file overlap with other sessions |
 | `git stint test [-- cmd]` | Run tests in the session worktree |
 | `git stint test --combine A B` | Test multiple sessions merged together |

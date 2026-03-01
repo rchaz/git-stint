@@ -157,6 +157,11 @@ export function resolveSession(explicit?: string): SessionManifest {
   if (manifests.length === 1) return manifests[0];
   if (manifests.length === 0) throw new Error("No active sessions. Run `git stint start <name>` to create one.");
 
+  // PPID-based clientId affinity
+  const ppid = String(process.ppid);
+  const clientMatch = manifests.filter(m => m.clientId === ppid);
+  if (clientMatch.length === 1) return clientMatch[0];
+
   const names = manifests.map((m) => m.name).join(", ");
   throw new Error(
     `Multiple active sessions: ${names}.\n` +

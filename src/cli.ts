@@ -179,6 +179,11 @@ try {
       break;
     }
 
+    case "which": {
+      session.which(getFlag("--session"), args.includes("--worktree"));
+      break;
+    }
+
     case "list": {
       if (args.includes("--json")) {
         session.listJson();
@@ -273,6 +278,7 @@ Commands:
   end                       Finalize session, clean up everything
   abort                     Discard session — delete all changes
   undo                      Revert last commit, changes become pending
+  which [--worktree]        Print resolved session name or worktree path
   conflicts                 Check file overlap with other sessions
   test [-- <cmd>]           Run tests in the session worktree
   test --combine A B        Test multiple sessions merged together

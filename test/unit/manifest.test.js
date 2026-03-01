@@ -226,6 +226,38 @@ describe("manifest", () => {
       saveManifest(makeManifest("beta"));
       assert.throws(() => resolveSession(), /git stint list/);
     });
+
+    it("resolves by PPID when multiple sessions exist", () => {
+      const a = makeManifest("alpha");
+      a.clientId = String(process.ppid);
+      saveManifest(a);
+      const b = makeManifest("beta");
+      b.clientId = "99999";
+      saveManifest(b);
+      const m = resolveSession();
+      assert.equal(m.name, "alpha");
+    });
+
+    it("falls through to error when no clientId matches PPID", () => {
+      const a = makeManifest("alpha");
+      a.clientId = "11111";
+      saveManifest(a);
+      const b = makeManifest("beta");
+      b.clientId = "22222";
+      saveManifest(b);
+      assert.throws(() => resolveSession(), /Multiple active sessions/);
+    });
+
+    it("explicit --session takes priority over PPID", () => {
+      const a = makeManifest("alpha");
+      a.clientId = String(process.ppid);
+      saveManifest(a);
+      const b = makeManifest("beta");
+      b.clientId = "99999";
+      saveManifest(b);
+      const m = resolveSession("beta");
+      assert.equal(m.name, "beta");
+    });
   });
 
   describe("getRepoRoot()", () => {

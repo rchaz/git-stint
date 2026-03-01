@@ -20,6 +20,7 @@ import {
   list,
   listJson,
   prune,
+  which,
   allowMain,
 } from "../../dist/session.js";
 import {
@@ -983,6 +984,22 @@ describe("allowMain()", () => {
     end("revoke-test");
   });
 });
+
+  describe("which()", () => {
+    it("prints session name", () => {
+      start("which-test");
+      const logs = captureConsole(() => which("which-test"));
+      assert.ok(logs.some((l) => l === "which-test"));
+      end("which-test");
+    });
+
+    it("prints worktree path with --worktree flag", () => {
+      start("which-wt");
+      const logs = captureConsole(() => which("which-wt", true));
+      assert.ok(logs.some((l) => l.endsWith(".stint/which-wt")));
+      end("which-wt");
+    });
+  });
 
 // --- Helpers ---
 
