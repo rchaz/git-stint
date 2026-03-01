@@ -5,7 +5,7 @@
 </p>
 
 [![npm](https://img.shields.io/npm/v/git-stint)](https://www.npmjs.com/package/git-stint)
-[![CI](https://github.com/rchaz/git-stint/actions/workflows/test.yml/badge.svg)](https://github.com/rchaz/git-stint/actions)
+[![CI](https://github.com/rchaz/git-stint/actions/workflows/ci.yml/badge.svg)](https://github.com/rchaz/git-stint/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js: 20+](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org)
 
