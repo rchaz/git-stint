@@ -164,7 +164,9 @@ if [ -n "$CLIENT_ID" ]; then
   CLIENT_FLAG="--client-id $CLIENT_ID"
 fi
 
-START_OUTPUT=$(git-stint start "$SESSION_NAME" $CLIENT_FLAG 2>&1) || {
+# Always adopt uncommitted changes when auto-creating — files may have been
+# written to main via Bash (bypassing hooks) before this session was created.
+START_OUTPUT=$(git-stint start "$SESSION_NAME" --adopt $CLIENT_FLAG 2>&1) || {
   # If start fails, allow the write
   exit 0
 }

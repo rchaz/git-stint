@@ -119,6 +119,8 @@ The name becomes the branch (\`stint/<name>\`) and the PR title context.
 ## Session Lifecycle
 
 - If the hook blocks a write, create a session: \`git stint start <descriptive-name>\`
+- Any uncommitted files on main are automatically carried into the new session.
+  Do NOT redo work that was already written — it is adopted into the worktree.
 - All edits redirect to \`.stint/<session>/\` worktree.
 - \`git stint commit -m "msg"\` to commit logical units of work.
 - \`git stint pr\` to push and create PR.
