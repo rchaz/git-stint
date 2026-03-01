@@ -96,7 +96,7 @@ git stint end
 | `git stint squash -m "msg"` | Collapse all commits into one |
 | `git stint merge` | Merge session into current branch (no PR) |
 | `git stint pr [--title "..."]` | Push branch and create GitHub PR |
-| `git stint end` | Finalize session, clean up everything |
+| `git stint end` | Finalize session, clean up everything (deletes remote branch if merged) |
 | `git stint abort` | Discard session — delete all changes |
 | `git stint undo` | Revert last commit, changes become pending |
 | `git stint conflicts` | Check file overlap with other sessions |
@@ -346,6 +346,7 @@ Combined testing creates a temporary octopus merge of the specified sessions, ru
 - **`execFileSync` everywhere** — array arguments prevent shell injection. No `execSync` with string interpolation.
 - **Atomic manifest writes** — write to `.tmp`, then `rename()`. Crash-safe.
 - **Symlinks for shared data** — gitignored dirs (caches, data) symlink into worktrees instead of being copied or lost.
+- **Safe remote branch cleanup** — on `end`/`merge`, deletes the remote branch only when all changes are verified merged. Uses a two-tier check (commit ancestry + content diff) that handles regular merges, squash merges, and rebase merges. Unmerged branches are always preserved with a warning.
 - **Zero runtime dependencies** — only Node.js built-ins. Dev deps are TypeScript and @types/node.
 
 ## git-stint vs GitButler

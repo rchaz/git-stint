@@ -57,6 +57,7 @@ Always build before testing — tests import from `dist/`.
 - **allow-main flag**: `.git/stint-main-allowed-<PID>` — per-client flag created by `allowMain(clientId?)`. Scoped to a single Claude Code instance via PID. Stale flags cleaned by `prune()`.
 - **adopt changes**: `start()` stashes uncommitted changes from main, pops into worktree. Stash happens before symlink creation to avoid conflicts.
 - **clientId**: Session affinity via `$PPID`. Each Claude Code instance maps to its own session.
+- **remote branch cleanup**: `cleanup()` deletes the remote branch when all changes are verified merged. Two-tier check: `--is-ancestor` (regular merges) then content diff of changed files (squash/rebase merges). Checks both default branch and current branch. Skips if main repo is on the session branch itself. Network errors are caught — never blocks `end`.
 
 ## Publishing
 

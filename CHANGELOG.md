@@ -5,6 +5,16 @@ All notable changes to git-stint will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-02-28
+
+### Added
+- **Remote branch cleanup** — `end` and `merge` now delete the remote branch when all changes are verified merged into the target branch
+- Two-tier merge detection: commit ancestry (`--is-ancestor`) for regular merges, content diff for squash and rebase merges
+- Checks against both the default branch and the current branch (supports non-main workflows like `develop`)
+- Guards against false positives when the main repo is checked out to the session branch
+- Graceful handling of network errors and missing remotes — warnings with manual deletion commands, never blocks the `end` operation
+- Unmerged remote branches are always preserved with a clear warning and the exact `git push origin --delete` command to run manually
+
 ## [0.2.3] - 2026-02-28
 
 ### Added
