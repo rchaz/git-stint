@@ -152,7 +152,8 @@ if [ "$MAIN_BRANCH_POLICY" = "prompt" ]; then
   fi
   echo "BLOCKED: Writing to main branch." >&2
   echo "To allow, run: git stint allow-main --client-id $CLIENT_ID" >&2
-  echo "To create a session instead, run: git stint start <name>" >&2
+  echo "To create a session instead, run: git stint start <descriptive-name>" >&2
+  echo "  (pick a short name that describes your task, e.g. fix-auth-refresh, add-user-search)" >&2
   exit 2
 fi
 

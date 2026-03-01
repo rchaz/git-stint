@@ -108,9 +108,17 @@ const RULES_CONTENT = `# Git Stint Workflow
 All file edits are intercepted by git-stint hooks and redirected to isolated
 worktrees. One stint session = one branch = one PR.
 
+## Session Naming
+
+When creating a session, pick a short descriptive name that captures the task:
+- Good: \`fix-auth-refresh\`, \`add-user-search\`, \`refactor-db-queries\`
+- Bad: \`session-1\`, \`changes\`, \`test\`, \`update\`
+
+The name becomes the branch (\`stint/<name>\`) and the PR title context.
+
 ## Session Lifecycle
 
-- Session auto-creates on first Write/Edit (via PreToolUse hook).
+- If the hook blocks a write, create a session: \`git stint start <descriptive-name>\`
 - All edits redirect to \`.stint/<session>/\` worktree.
 - \`git stint commit -m "msg"\` to commit logical units of work.
 - \`git stint pr\` to push and create PR.
