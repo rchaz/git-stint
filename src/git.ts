@@ -86,6 +86,39 @@ export function deleteRemoteBranch(name: string): void {
   git("push", "origin", "--delete", name);
 }
 
+/**
+ * Check if all changes from `branch` are present in `into`.
+ * Handles regular merges, squash merges, and rebase merges.
+ *
+ * 1. Fast path: branch tip is an ancestor of `into` (regular merge / ff).
+ * 2. Content check: every file the branch changed has identical content in
+ *    `into`. This catches squash and rebase merges where SHAs differ but
+ *    the content is the same.
+ */
+export function isBranchMergedInto(branch: string, into: string): boolean {
+  // Fast path — works for regular merges and fast-forwards
+  try {
+    git("merge-base", "--is-ancestor", branch, into);
+    return true;
+  } catch {
+    // Not an ancestor — may still be squash/rebase merged
+  }
+
+  // Content check — compare files the branch changed against `into`
+  try {
+    const mergeBase = git("merge-base", into, branch);
+    const changedOutput = git("diff", "--name-only", mergeBase, branch);
+    if (!changedOutput) return true; // branch has no file changes
+
+    const files = changedOutput.split("\n");
+    const contentDiff = git("diff", into, branch, "--", ...files);
+    return contentDiff.length === 0;
+  } catch {
+    // If anything fails (e.g. branch already deleted), assume not merged
+    return false;
+  }
+}
+
 export function addWorktree(path: string, branch: string): void {
   git("worktree", "add", path, branch);
 }

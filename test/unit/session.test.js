@@ -390,6 +390,209 @@ describe("session", () => {
       // but we can check manifest was deleted — it ran without error)
       assert.equal(loadManifest("auto-commit-end"), null);
     });
+
+    it("deletes remote branch when changes are merged (regular merge)", () => {
+      // Set up a bare remote
+      const remoteDir = mkdtempSync(join(tmpdir(), "git-stint-remote-"));
+      execFileSync("git", ["init", "--bare", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "remote", "add", "origin", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "push", "-u", "origin", "main"], { stdio: "pipe" });
+
+      start("remote-merged");
+      const m = loadManifest("remote-merged");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "feature.txt"), "new feature\n");
+      sessionCommit("Add feature", "remote-merged");
+
+      // Push branch to remote
+      git.push(m.branch);
+      assert.ok(git.remoteBranchExists(m.branch));
+
+      // Merge into main (so changes are merged)
+      merge("remote-merged");
+
+      // After merge+cleanup, remote branch should be deleted
+      // Fetch to update remote refs
+      execFileSync("git", ["-C", repo.dir, "fetch", "--prune", "origin"], { stdio: "pipe" });
+      assert.ok(!git.remoteBranchExists("stint/remote-merged"));
+
+      rmSync(remoteDir, { recursive: true, force: true });
+    });
+
+    it("deletes remote branch when changes are squash-merged", () => {
+      // Set up a bare remote
+      const remoteDir = mkdtempSync(join(tmpdir(), "git-stint-remote-"));
+      execFileSync("git", ["init", "--bare", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "remote", "add", "origin", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "push", "-u", "origin", "main"], { stdio: "pipe" });
+
+      start("squash-merged");
+      const m = loadManifest("squash-merged");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "feature.txt"), "squashed feature\n");
+      sessionCommit("Add squashed feature", "squash-merged");
+
+      // Push branch to remote
+      git.push(m.branch);
+      assert.ok(git.remoteBranchExists(m.branch));
+
+      // Simulate a squash merge (like GitHub "Squash and merge"):
+      // Apply the same changes to main with a new commit (different SHA)
+      writeFileSync(join(repo.dir, "feature.txt"), "squashed feature\n");
+      execFileSync("git", ["-C", repo.dir, "add", "-A"], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "commit", "-m", "Squash: Add squashed feature"], { stdio: "pipe" });
+
+      // Now end (not merge) — simulates user ending after PR was squash-merged
+      end("squash-merged");
+
+      // Remote branch should be deleted (content check detects squash merge)
+      execFileSync("git", ["-C", repo.dir, "fetch", "--prune", "origin"], { stdio: "pipe" });
+      assert.ok(!git.remoteBranchExists("stint/squash-merged"));
+
+      rmSync(remoteDir, { recursive: true, force: true });
+    });
+
+    it("does NOT delete remote branch when changes are unmerged", () => {
+      // Set up a bare remote
+      const remoteDir = mkdtempSync(join(tmpdir(), "git-stint-remote-"));
+      execFileSync("git", ["init", "--bare", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "remote", "add", "origin", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "push", "-u", "origin", "main"], { stdio: "pipe" });
+
+      start("unmerged");
+      const m = loadManifest("unmerged");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "feature.txt"), "unmerged work\n");
+      sessionCommit("Add unmerged work", "unmerged");
+
+      // Push branch to remote
+      git.push(m.branch);
+      assert.ok(git.remoteBranchExists(m.branch));
+
+      // End WITHOUT merging — remote branch should be preserved
+      end("unmerged");
+
+      // Remote branch should still exist
+      assert.ok(git.remoteBranchExists("stint/unmerged"));
+
+      rmSync(remoteDir, { recursive: true, force: true });
+    });
+
+    it("does NOT delete remote branch when only partially squash-merged", () => {
+      // Set up a bare remote
+      const remoteDir = mkdtempSync(join(tmpdir(), "git-stint-remote-"));
+      execFileSync("git", ["init", "--bare", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "remote", "add", "origin", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "push", "-u", "origin", "main"], { stdio: "pipe" });
+
+      start("partial-squash");
+      const m = loadManifest("partial-squash");
+      const wt = getWorktreePath(m);
+
+      // Branch changes two files
+      writeFileSync(join(wt, "file-a.txt"), "content a\n");
+      writeFileSync(join(wt, "file-b.txt"), "content b\n");
+      sessionCommit("Add two files", "partial-squash");
+
+      git.push(m.branch);
+
+      // Simulate squash-merge that only includes file-a (file-b was dropped)
+      writeFileSync(join(repo.dir, "file-a.txt"), "content a\n");
+      execFileSync("git", ["-C", repo.dir, "add", "-A"], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "commit", "-m", "Partial squash"], { stdio: "pipe" });
+
+      end("partial-squash");
+
+      // Remote branch should be preserved — file-b is not in main
+      assert.ok(git.remoteBranchExists("stint/partial-squash"));
+
+      rmSync(remoteDir, { recursive: true, force: true });
+    });
+
+    it("deletes remote branch when merged into non-default branch", () => {
+      // Set up a bare remote
+      const remoteDir = mkdtempSync(join(tmpdir(), "git-stint-remote-"));
+      execFileSync("git", ["init", "--bare", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "remote", "add", "origin", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "push", "-u", "origin", "main"], { stdio: "pipe" });
+
+      // Create and switch to a 'develop' branch
+      execFileSync("git", ["-C", repo.dir, "checkout", "-b", "develop"], { stdio: "pipe" });
+
+      start("develop-merge");
+      const m = loadManifest("develop-merge");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "feature.txt"), "develop feature\n");
+      sessionCommit("Add develop feature", "develop-merge");
+
+      git.push(m.branch);
+      assert.ok(git.remoteBranchExists(m.branch));
+
+      // Merge into develop (not main)
+      merge("develop-merge");
+
+      // Remote branch should be deleted — changes are in develop (current branch)
+      execFileSync("git", ["-C", repo.dir, "fetch", "--prune", "origin"], { stdio: "pipe" });
+      assert.ok(!git.remoteBranchExists("stint/develop-merge"));
+
+      // Switch back to main for afterEach cleanup
+      execFileSync("git", ["-C", repo.dir, "checkout", "main"], { stdio: "pipe" });
+      rmSync(remoteDir, { recursive: true, force: true });
+    });
+
+    it("does NOT delete remote when main repo is on the session branch", () => {
+      // Set up a bare remote
+      const remoteDir = mkdtempSync(join(tmpdir(), "git-stint-remote-"));
+      execFileSync("git", ["init", "--bare", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "remote", "add", "origin", remoteDir], { stdio: "pipe" });
+      execFileSync("git", ["-C", repo.dir, "push", "-u", "origin", "main"], { stdio: "pipe" });
+
+      start("self-checkout");
+      const m = loadManifest("self-checkout");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "feature.txt"), "important work\n");
+      sessionCommit("Add important work", "self-checkout");
+
+      git.push(m.branch);
+
+      // Detach worktree so we can checkout the session branch in the main repo.
+      // Worktrees lock the branch, so detach via plumbing.
+      execFileSync("git", ["-C", wt, "checkout", "--detach"], { stdio: "pipe" });
+
+      // Checkout the session branch in the main repo (unusual but possible)
+      execFileSync("git", ["-C", repo.dir, "checkout", m.branch], { stdio: "pipe" });
+
+      // End the session — should NOT delete remote because the "merge" is just
+      // the main repo being on the session branch, not a real merge into main
+      end("self-checkout");
+
+      // Remote branch should be preserved — changes are NOT in main
+      assert.ok(git.remoteBranchExists("stint/self-checkout"));
+
+      // Cleanup
+      execFileSync("git", ["-C", repo.dir, "checkout", "main"], { stdio: "pipe" });
+      rmSync(remoteDir, { recursive: true, force: true });
+    });
+
+    it("handles no remote gracefully", () => {
+      // No remote configured — end should work fine without touching remotes
+      start("no-remote");
+      const m = loadManifest("no-remote");
+      const wt = getWorktreePath(m);
+
+      writeFileSync(join(wt, "local.txt"), "local only\n");
+      sessionCommit("Local work", "no-remote");
+
+      end("no-remote");
+
+      assert.equal(loadManifest("no-remote"), null);
+      assert.ok(!git.branchExists("stint/no-remote"));
+    });
   });
 
   describe("abort()", () => {

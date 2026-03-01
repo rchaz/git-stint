@@ -775,15 +775,59 @@ function cleanup(manifest: SessionManifest, force = false): void {
     }
   }
 
+  // Check if remote branch should be cleaned up (before deleting local branch,
+  // since we need it for the merge check)
+  let shouldDeleteRemote = false;
+  if (git.remoteBranchExists(manifest.branch)) {
+    // Build list of branches to check against. We check both the default branch
+    // (covers PR merges) and the current branch of the main repo (covers
+    // `git stint merge` into non-default branches like 'develop').
+    const targets = new Set<string>();
+    targets.add(git.getDefaultBranch());
+    try {
+      const current = git.currentBranch(topLevel);
+      // Skip if the main repo is on the session branch itself — that would
+      // make --is-ancestor trivially true without an actual merge.
+      if (current !== manifest.branch) {
+        targets.add(current);
+      }
+    } catch { /* detached HEAD — skip */ }
+
+    for (const target of targets) {
+      if (git.isBranchMergedInto(manifest.branch, target)) {
+        shouldDeleteRemote = true;
+        break;
+      }
+    }
+
+    if (!shouldDeleteRemote) {
+      console.log(
+        `Remote branch 'origin/${manifest.branch}' was NOT deleted (has unmerged changes).\n` +
+        `  To delete manually: git push origin --delete ${manifest.branch}`,
+      );
+    }
+  }
+
   // Delete local branch
   try {
     git.deleteBranch(manifest.branch);
   } catch { /* branch may already be deleted */ }
 
-  // Delete remote tracking ref if it exists (no network call — just local ref).
-  // We intentionally do NOT delete the remote branch itself:
-  // the user may have an open PR. They can clean up with `git push origin --delete`.
-  // The local tracking ref is cleaned up by `git branch -D` above.
+  // Delete remote branch if all changes are merged
+  if (shouldDeleteRemote) {
+    try {
+      git.deleteRemoteBranch(manifest.branch);
+      console.log(`Deleted remote branch 'origin/${manifest.branch}'.`);
+    } catch {
+      // Branch may already be deleted on the remote (e.g., GitHub auto-delete
+      // after PR merge) or the network may be down. Either way, not critical.
+      console.log(
+        `Could not delete remote branch 'origin/${manifest.branch}'.\n` +
+        `  It may have already been deleted (e.g., by GitHub after PR merge).\n` +
+        `  To delete manually: git push origin --delete ${manifest.branch}`,
+      );
+    }
+  }
 
   // Delete manifest last — if anything above fails, manifest persists for prune
   deleteManifest(manifest.name);
