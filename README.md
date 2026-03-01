@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js: 20+](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org)
 
-**Built for AI agents to multitask safely.**
+**Built for AI agents to multitask without collisions.**
 
 Run multiple AI coding agents in parallel — each one gets its own branch, its own worktree, and its own lifecycle. git-stint handles the branching, tracking, checkpointing, and cleanup autonomously. You focus on the work. The grunt work is managed under the hood.
 
