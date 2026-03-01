@@ -1,86 +1,108 @@
 # git-stint
 
+[![npm](https://img.shields.io/npm/v/git-stint)](https://www.npmjs.com/package/git-stint)
+[![CI](https://github.com/rchaz/git-stint/actions/workflows/test.yml/badge.svg)](https://github.com/rchaz/git-stint/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Node.js: 20+](https://img.shields.io/badge/Node.js-20%2B-green.svg)](https://nodejs.org)
 
-Session-scoped change tracking for AI coding agents. Each session gets a real git branch and worktree — isolated by default, mergeable at the end.
+**Built for AI agents to multitask safely.**
 
-Built to replace GitButler for AI-agent workflows. No virtual branches, no custom merge engine, no state corruption. Just git.
+Run multiple AI coding agents in parallel — each one gets its own branch, its own worktree, and its own lifecycle. git-stint handles the branching, tracking, checkpointing, and cleanup autonomously. You focus on the work. The grunt work is managed under the hood.
 
-## Why
+No cloud VMs. No Docker containers. No desktop app. No new VCS to learn. Just git — with session management that runs itself.
 
-AI coding agents (Claude Code, Cursor, Copilot) edit files but have no clean way to:
+```
+Agent A fixes auth     ──→  .stint/auth-fix/     → builds, tests, PRs independently
+Agent B adds search    ──→  .stint/add-search/   → builds, tests, PRs independently
+Agent C writes docs    ──→  .stint/update-docs/  → builds, tests, PRs independently
+You keep working       ──→  main branch, untouched
+```
 
-1. **Track what they changed** — separate agent changes from human changes
-2. **Isolate sessions** — two parallel agents editing the same repo shouldn't conflict
-3. **Produce clean commits** — agent work should result in reviewable, mergeable PRs
-4. **Test in isolation** — verify one session's changes without interference
+## The Problem
 
-git-stint solves this with ~2,000 lines of TypeScript + bash on top of standard git primitives.
+When an AI coding agent works on your repo, you lose track of what it changed, your main branch accumulates half-finished work, and running two agents at once creates conflicts. There's no clean way to:
 
-## Prerequisites
+- **Separate agent changes from human changes** — who wrote what?
+- **Run agents in parallel** — two agents on the same branch will collide
+- **Get clean, reviewable PRs** — agent work is often a stream of small edits
+- **Undo an agent's work** — reverting scattered changes across files is painful
+- **Prevent accidental damage** — agents write to `main` unless something stops them
 
-- [Node.js](https://nodejs.org) 20+
-- [git](https://git-scm.com) 2.20+ (worktree support)
-- [`gh` CLI](https://cli.github.com) (optional, for PR creation)
+## How git-stint Solves This
 
-## Install
+Each agent session gets a **real git branch** and a **worktree** — not virtual branches, not overlays, not a custom VCS. Standard git, fully compatible with every tool you already use.
 
-### With Claude Code (recommended)
+Every step of the session lifecycle is autonomous:
+
+| What happens | What git-stint does | You do anything? |
+|---|---|---|
+| Agent writes its first file | Auto-creates a session branch + worktree | No |
+| Agent keeps writing files | Hooks track every change automatically | No |
+| Agent builds or runs tests | Runs in the isolated worktree — can't break main | No |
+| Conversation ends unexpectedly | Auto-commits a WIP checkpoint — nothing lost | No |
+| Work is ready to ship | `git stint squash` + `git stint pr` = clean PR | One command |
+| Session is done | `git stint end` cleans up branch, worktree, and remote | One command |
+
+## Key Features
+
+**Fully autonomous** — Install once, then forget about it. Hooks intercept file writes, create sessions, track changes, and checkpoint work without any manual intervention. The agent works on its stint. git-stint manages everything else.
+
+**Parallel agents, zero conflicts** — Each agent instance gets its own session via process ID. Three Claude Code windows? Three isolated branches. Each can build, test, commit, and create PRs independently — no coordination required between them.
+
+**Safe builds and tests** — Every session runs in its own worktree. `npm test`, `cargo build`, `go test` — all execute against that session's files only. One agent's broken build can't block another. `git stint test --combine A B` lets you verify multiple sessions work together before merging any of them.
+
+**No work lost — ever** — Conversation timeout? Crash? User closes the window? The stop hook auto-commits pending changes as a WIP checkpoint. Come back later, the work is still there.
+
+**Clean PRs from messy work** — An agent's stream of incremental edits becomes a single, reviewable commit with `git stint squash`. Create a PR with auto-generated descriptions in one command.
+
+**Conflict detection before merge** — `git stint conflicts` checks file overlap across all active sessions. Know which agents are touching the same files *before* you try to merge.
+
+**Shared directories** — Large caches (`node_modules`, `venv`, build outputs) are symlinked into worktrees instead of duplicated. Agents get fast startup, you save disk space.
+
+**Zero dependencies** — Pure Node.js built-ins. No native modules, no runtime deps, no surprises. Installs in seconds.
+
+**Just git underneath** — Real branches, real worktrees, real commits. `git log`, `git diff`, lazygit, VS Code, GitHub — every tool you already use works because there's nothing custom underneath.
+
+## Quick Start
+
+```bash
+# Install
+npm install -g git-stint
+
+# Set up hooks in your repo
+cd /path/to/your/repo
+git stint install-hooks
+
+# Start a session
+git stint start auth-fix
+cd .stint/auth-fix/
+
+# Make changes, then commit
+git stint commit -m "Fix token refresh logic"
+
+# Squash into a clean commit and create a PR
+git stint squash -m "Fix auth token refresh"
+git stint pr --title "Fix auth bug"
+
+# Clean up
+git stint end
+```
+
+### With Claude Code
 
 Tell Claude Code:
 
 > Install git-stint globally (`npm install -g git-stint`), set up hooks for this repo, and create a .stint.json
 
-Claude Code will:
-1. Run `npm install -g git-stint`
-2. Run `git stint install-hooks` (writes to `.claude/settings.json`)
-3. Create a `.stint.json` with your preferred `main_branch_policy`
-
-### Manual install
+Or manually:
 
 ```bash
-# 1. Install
-npm install -g git-stint       # from npm
-# — or from source —
-git clone https://github.com/rchaz/git-stint.git
-cd git-stint && npm install && npm run build && npm link
-
-# 2. Set up hooks in your project
+npm install -g git-stint
 cd /path/to/your/repo
-git stint install-hooks
-
-# 3. Configure (optional)
-cat > .stint.json << 'EOF'
-{
-  "shared_dirs": [],
-  "main_branch_policy": "prompt"
-}
-EOF
+git stint install-hooks    # Writes to .claude/settings.json
 ```
 
-## Quick Start
-
-```bash
-# Start a session (creates branch + worktree)
-git stint start auth-fix
-cd .stint/auth-fix/
-
-# Work normally — make changes, edit files...
-
-# Commit progress (advances baseline)
-git stint commit -m "Fix token refresh logic"
-
-# More changes...
-git stint commit -m "Add refresh token tests"
-
-# Squash into a single clean commit
-git stint squash -m "Fix auth token refresh"
-
-# Create PR and clean up
-git stint pr --title "Fix auth bug"
-git stint end
-```
+Once hooks are installed, Claude Code automatically works in sessions. When `main_branch_policy` is `"block"`, the first file write auto-creates a session and redirects the agent — zero manual steps.
 
 ## Commands
 
@@ -89,46 +111,44 @@ git stint end
 | `git stint start [name]` | Create a new session (branch + worktree) |
 | `git stint list` | List all active sessions |
 | `git stint status` | Show current session state |
-| `git stint track <file...>` | Add files to the pending list |
 | `git stint diff` | Show uncommitted changes in worktree |
 | `git stint commit -m "msg"` | Commit changes, advance baseline |
 | `git stint log` | Show session commit history |
 | `git stint squash -m "msg"` | Collapse all commits into one |
-| `git stint merge` | Merge session into current branch (no PR) |
+| `git stint merge` | Merge session into current branch |
 | `git stint pr [--title "..."]` | Push branch and create GitHub PR |
-| `git stint end` | Finalize session, clean up everything (deletes remote branch if merged) |
+| `git stint end` | Finalize session, clean up everything |
 | `git stint abort` | Discard session — delete all changes |
 | `git stint undo` | Revert last commit, changes become pending |
 | `git stint which [--worktree]` | Print resolved session name (or worktree path) |
 | `git stint conflicts` | Check file overlap with other sessions |
 | `git stint test [-- cmd]` | Run tests in the session worktree |
 | `git stint test --combine A B` | Test multiple sessions merged together |
+| `git stint track <file...>` | Add files to the pending list |
 | `git stint prune` | Clean up orphaned worktrees/branches |
-| `git stint allow-main [--client-id <PID>]` | Allow writes to main branch (scoped to one process/session) |
+| `git stint allow-main` | Allow writes to main (scoped to one process) |
 | `git stint install-hooks` | Install Claude Code hooks |
 | `git stint uninstall-hooks` | Remove Claude Code hooks |
 
 ### Options
 
-- `--session <name>` — Specify which session (auto-detected from CWD)
-- `--client-id <id>` — Client identifier (used by hooks). For `start`, tags the session. For `allow-main`, scopes the flag to that client.
-- `--adopt` / `--no-adopt` — Override `adopt_changes` config for this start
-- `-m "message"` — Commit or squash message
-- `--title "title"` — PR title
-- `--version` — Show version number
+| Flag | Description |
+|------|-------------|
+| `--session <name>` | Target a specific session (auto-detected from CWD) |
+| `--client-id <id>` | Client identifier for multi-instance affinity |
+| `--adopt` / `--no-adopt` | Control whether uncommitted changes carry into a new session |
+| `-m "message"` | Commit or squash message |
+| `--title "title"` | PR title |
+| `--version` | Show version number |
 
 ## Configuration — `.stint.json`
 
-Create a `.stint.json` file in your repo root to configure git-stint behavior:
+Create a `.stint.json` in your repo root:
 
 ```json
 {
-  "shared_dirs": [
-    "backend/data",
-    "backend/results",
-    "backend/logs"
-  ],
-  "main_branch_policy": "prompt",
+  "shared_dirs": ["node_modules", ".venv", "dist"],
+  "main_branch_policy": "block",
   "force_cleanup": "prompt",
   "adopt_changes": "always"
 }
@@ -136,90 +156,77 @@ Create a `.stint.json` file in your repo root to configure git-stint behavior:
 
 | Field | Values | Default | Description |
 |-------|--------|---------|-------------|
-| `shared_dirs` | `string[]` | `[]` | Directories to symlink from worktree to main repo on `start`. Use for gitignored data dirs (caches, build outputs, logs) that shouldn't be duplicated per session. |
-| `main_branch_policy` | `"prompt"` / `"allow"` / `"block"` | `"prompt"` | What happens when writing to main with hooks enabled. `"block"` auto-creates a session. `"allow"` passes through. `"prompt"` blocks with instructions to run `git stint allow-main` or `git stint start`. |
-| `force_cleanup` | `"prompt"` / `"force"` / `"fail"` | `"prompt"` | What happens when non-force worktree removal fails. `"force"` retries with `--force`. `"fail"` throws an error. `"prompt"` retries with force (default, same as previous behavior). |
-| `adopt_changes` | `"always"` / `"never"` / `"prompt"` | `"always"` | What happens when `git stint start` is called with uncommitted changes on main. `"always"` stashes and moves them into the new worktree. `"never"` leaves them on main. `"prompt"` warns and suggests `--adopt` or `--no-adopt`. |
-
-### Shared Directories
-
-When a worktree is created, gitignored directories (caches, build outputs, data) don't exist in it. Without `shared_dirs`, you'd need to manually symlink or recreate them.
-
-With `shared_dirs` configured, `git stint start` automatically:
-1. Creates symlinks from the worktree to the main repo for each listed directory
-2. On `git stint end` / `abort`, removes the symlinks before deleting the worktree — so linked data is never lost
-
-```
-# Main repo                          # Worktree (.stint/my-session/)
-backend/data/  (200MB cache)    ←──  backend/data → symlink to main
-backend/results/                ←──  backend/results → symlink to main
-```
-
-The directories listed in `shared_dirs` should typically be gitignored, since they contain large or generated data that shouldn't be committed.
+| `shared_dirs` | `string[]` | `[]` | Directories to symlink from worktree to main repo. Use for gitignored dirs (caches, build outputs) that shouldn't be duplicated per session. |
+| `main_branch_policy` | `"block"` / `"prompt"` / `"allow"` | `"prompt"` | What happens when an agent writes to main. `"block"` auto-creates a session. `"prompt"` blocks with instructions. `"allow"` passes through. |
+| `force_cleanup` | `"force"` / `"prompt"` / `"fail"` | `"prompt"` | Behavior when worktree removal fails. |
+| `adopt_changes` | `"always"` / `"never"` / `"prompt"` | `"always"` | Whether uncommitted changes on main carry into new sessions. |
 
 ### Main Branch Policy
 
-Controls what happens when Claude Code (or another agent) tries to write directly to the main branch while hooks are installed:
+The hook intercepts every file write from the AI agent:
 
-- **`"block"`** — Auto-creates a session and blocks the write, forcing the agent to work in the worktree. This is the most protective mode.
-- **`"prompt"`** (default) — Blocks with a message that includes the exact command to unblock, e.g. `git stint allow-main --client-id 56193`. Lets you choose per-situation.
-- **`"allow"`** — Passes through silently. Hooks still track files in existing worktrees, but don't enforce session usage.
+- **`"block"`** — Auto-creates a session on the first write. The agent is seamlessly redirected to the worktree. Most protective mode.
+- **`"prompt"`** (default) — Blocks with a message showing the exact command to unblock (`git stint allow-main --client-id <PID>`). Lets you decide per-situation.
+- **`"allow"`** — Passes through. Hooks still track files in existing sessions but don't enforce session usage.
 
-The `allow-main` flag is scoped per-process. When the hook blocks a write, it prints the exact command with the correct `--client-id` (the Claude Code instance's PID). Running that command creates `.git/stint-main-allowed-<PID>`, which only unblocks that specific instance. Other Claude Code sessions remain blocked.
-
-**Important:** Always use the `--client-id` value from the hook's block message. Running `allow-main` without `--client-id` from a separate terminal will NOT unblock Claude Code (different process tree). The intended flow is:
-
-1. Hook blocks Claude's write and prints: `git stint allow-main --client-id <PID>`
-2. Claude (or the user telling Claude) runs that exact command
-3. Claude retries the write — it succeeds
-
-Stale flags from dead processes are cleaned up by `git stint prune`.
+The `allow-main` flag is scoped per-process. When the hook blocks a write, it prints the exact command with the correct `--client-id`. Only that specific agent instance is unblocked — other instances stay protected. Stale flags from dead processes are cleaned by `git stint prune`.
 
 ### Adopting Uncommitted Changes
 
-When you run `git stint start` with uncommitted changes on main, behavior depends on `adopt_changes`:
+When you run `git stint start` with uncommitted changes on main:
 
-- **`"always"`** (default) — Stashes changes (staged + unstaged + untracked), pops them into the new worktree, leaves main clean. Your work carries over seamlessly.
-- **`"never"`** — Leaves uncommitted changes on main. The new worktree starts clean.
-- **`"prompt"`** — Warns about uncommitted changes and suggests using `--adopt` or `--no-adopt`.
-
-CLI flags override the config for a single invocation:
+- **`"always"`** (default) — Stashes changes, pops them into the new worktree. Your work carries over seamlessly.
+- **`"never"`** — Leaves uncommitted changes on main. New worktree starts clean.
+- **`"prompt"`** — Warns and suggests `--adopt` or `--no-adopt`.
 
 ```bash
-git stint start my-feature --adopt       # Force adopt (overrides "never")
-git stint start my-feature --no-adopt    # Force skip (overrides "always")
+git stint start my-feature --adopt       # Force adopt regardless of config
+git stint start my-feature --no-adopt    # Skip regardless of config
 ```
 
-## Claude Code Integration
+## How It Works
 
-git-stint includes hooks that make it work seamlessly with [Claude Code](https://docs.anthropic.com/en/docs/claude-code):
+### Session Model
 
-- **PreToolUse hook**: When Claude writes/edits a file inside a session worktree, the file is automatically tracked. If Claude tries to write to the main repo, behavior depends on `main_branch_policy` in `.stint.json`. Writes to gitignored files (e.g. `node_modules/`, `dist/`, `.env`) are always allowed through — they can't be committed, so they don't need branch isolation.
-- **Stop hook**: When a Claude Code conversation ends, pending changes are auto-committed as a WIP checkpoint.
-- **Session affinity**: Each Claude Code instance is mapped to its own session via `clientId` (process ID). Multiple Claude instances can work in parallel without hijacking each other's sessions.
+Each session creates three things:
 
-### Setup for Claude Code
-
-```bash
-# 1. Install git-stint globally
-npm install -g git-stint
-
-# 2. Navigate to your project
-cd /path/to/your/repo
-
-# 3. Install hooks (writes to .claude/settings.json)
-git stint install-hooks
-
-# 4. (Optional) Configure shared dirs and branch policy
-cat > .stint.json << 'EOF'
-{
-  "shared_dirs": [],
-  "main_branch_policy": "prompt"
-}
-EOF
-
-# 5. Done — Claude Code will now auto-track files in sessions
 ```
+Branch:    stint/auth-fix          (real git branch, forked from HEAD)
+Worktree:  .stint/auth-fix/       (isolated working directory)
+Manifest:  .git/sessions/auth-fix.json  (session state, disposable)
+```
+
+The **baseline cursor** advances on each commit. `git diff baseline..HEAD` always shows exactly the uncommitted work — no guesswork about what changed.
+
+### Session Resolution
+
+You rarely need `--session`. git-stint resolves the active session automatically:
+
+1. Explicit `--session <name>` flag
+2. CWD inside a `.stint/<name>/` worktree
+3. Process-based affinity (agent's PID maps to its session)
+4. Single session fallback (if only one session exists)
+
+### Parallel Sessions
+
+Each session is fully isolated — separate branch, separate worktree, separate filesystem. Agents can safely do everything in parallel:
+
+```
+Session A: .stint/auth-fix/     ──→  edit, build, test, commit, PR
+Session B: .stint/add-tests/    ──→  edit, build, test, commit, PR
+Session C: .stint/refactor/     ──→  edit, build, test, commit, PR
+                                          └── all running simultaneously
+```
+
+One agent's `npm install` doesn't interfere with another's build. One agent's failing test doesn't block another's PR. Overlapping file edits are caught early by `git stint conflicts`, and final integration uses git's standard merge machinery.
+
+### Claude Code Hooks
+
+Two hooks make git-stint work automatically with Claude Code:
+
+**PreToolUse** — Intercepts every `Write`, `Edit`, and `NotebookEdit` tool call. If the file is inside a session worktree, it's tracked. If it's on main, the hook enforces the configured policy (block, prompt, or allow). Writes to gitignored files always pass through.
+
+**Stop** — When a conversation ends, commits all pending changes as a WIP checkpoint. No work is ever lost to timeouts or closed windows.
 
 To install hooks globally (all repos):
 
@@ -227,143 +234,27 @@ To install hooks globally (all repos):
 git stint install-hooks --user
 ```
 
-### Workflow with Claude Code
+### Smart Cleanup
 
-**Option A: Session-based (isolated branch)**
+`git stint end` handles everything:
 
-```bash
-# Start a session before asking Claude to work
-git stint start my-feature
-cd .stint/my-feature/
+- Removes symlinks before deleting worktrees (linked data is never lost)
+- Deletes the remote branch **only** when changes are verified merged on the remote — checks against `origin/main`, not local branches
+- Two-tier merge verification: commit ancestry for regular merges, content diff for squash/rebase merges
+- Network errors never block cleanup — unmerged branches are preserved with a warning
 
-# Tell Claude to work on things — hooks handle tracking automatically
+### Safety
 
-# When done, squash and PR
-git stint squash -m "Implement feature X"
-git stint pr
-git stint end
-```
+- All git commands use `execFileSync` with array arguments — no shell injection
+- Session names are validated (alphanumeric, hyphens, dots, underscores — no path traversal)
+- Manifest writes are atomic (temp file + rename) — crash-safe
+- `.stint/` is excluded via `.git/info/exclude` — never pollutes `.gitignore`
 
-Or let the hooks auto-create sessions — just start coding with Claude and the hook will create a session on the first write (when `main_branch_policy` is `"block"`).
+## Prerequisites
 
-**Option B: Quick edits on main (allow-main)**
-
-For small changes that don't need a branch, the hook blocks and tells Claude exactly what to run:
-
-```
-BLOCKED: Writing to main branch.
-To allow, run: git stint allow-main --client-id 56193
-To create a session instead, run: git stint start <name>
-```
-
-Claude runs the printed command, then retries the write — it succeeds. The flag only applies to that specific Claude Code session. Other instances stay blocked.
-
-## How It Works
-
-### Session Model
-
-Each session creates:
-- A **git branch** (`stint/<name>`) forked from HEAD
-- A **worktree** (`.stint/<name>/`) for isolated file access
-- A **manifest** (`.git/sessions/<name>.json`) tracking state
-
-```
-Session starts at HEAD = abc123
-  |
-Edit config.ts, server.ts
-  |
-"commit" -> changeset 1 (baseline advances to new SHA)
-  |
-Edit server.ts (again), test.ts
-  |
-"commit" -> changeset 2 (only NEW changes since last commit)
-```
-
-The **baseline cursor** advances on each commit. `git diff baseline..HEAD` always gives exactly the uncommitted work. No virtual branches, no custom merge engine.
-
-### Parallel Sessions
-
-Multiple sessions run simultaneously with full isolation:
-
-```
-Session A: edits config.ts, server.ts     -> .stint/session-a/
-Session B: edits server.ts, constants.ts  -> .stint/session-b/
-                  ^ overlap detected by `git stint conflicts`
-```
-
-Each session has its own worktree — no interference. Conflicts resolve at PR merge time, using git's standard merge machinery.
-
-### Testing
-
-```bash
-# Test a single session in its worktree
-git stint test -- npm test
-
-# Test multiple sessions merged together
-git stint test --combine auth-fix perf-update -- npm test
-```
-
-Combined testing creates a temporary octopus merge of the specified sessions, runs the test command, then cleans up. No permanent state changes.
-
-## Architecture
-
-```
-                          +----------------+
-                          |  .stint.json   |
-                          |  (config)      |
-                          +-------+--------+
-                                  |
-+-----------+    +-----------+    v    +----------------+
-|  CLI      |    | Session   |------->|  Config        |
-| (cli.ts)  |--->|(session.ts)|       | (config.ts)    |
-| arg parse |    | commands  |---+    +----------------+
-+-----------+    +-----+-----+  |
-                       |        +--->+----------------+
-                +------v------+      |  Manifest      |
-                |  Git        |      | (manifest.ts)  |
-                | (git.ts)    |      |  JSON state    |
-                |  plumbing   |      +----------------+
-                +-------------+
-```
-
-| File | Purpose | Lines |
-|------|---------|-------|
-| `src/git.ts` | Git command wrapper (`execFileSync`) | ~180 |
-| `src/manifest.ts` | Session state CRUD in `.git/sessions/` | ~200 |
-| `src/session.ts` | Core commands (start, commit, squash, pr, end...) | ~830 |
-| `src/config.ts` | `.stint.json` loading and validation | ~60 |
-| `src/conflicts.ts` | Cross-session file overlap detection | ~55 |
-| `src/test-session.ts` | Worktree-based testing + combined testing | ~140 |
-| `src/cli.ts` | Entry point, argument parsing | ~300 |
-| `src/install-hooks.ts` | Claude Code hook installation/removal | ~170 |
-| `adapters/claude-code/hooks/` | Bash hooks (PreToolUse + Stop) | ~220 |
-
-### Design Decisions
-
-- **Real git branches** — not virtual branches. Every git tool works: `git log`, `git diff`, lazygit, tig, VS Code.
-- **Worktrees for isolation** — the default state is isolated. No unapply/apply dance.
-- **JSON manifests** — stored in `.git/sessions/`. Disposable. Worst case: delete and start over.
-- **No custom merge engine** — git's built-in merge handles everything. Source of most GitButler complexity eliminated.
-- **`execFileSync` everywhere** — array arguments prevent shell injection. No `execSync` with string interpolation.
-- **Atomic manifest writes** — write to `.tmp`, then `rename()`. Crash-safe.
-- **Symlinks for shared data** — gitignored dirs (caches, data) symlink into worktrees instead of being copied or lost.
-- **Safe remote branch cleanup** — on `end`/`merge`, deletes the remote branch only when all changes are verified merged **on the remote**. Checks against remote tracking refs (`origin/main`), not local branches — so a local-only merge won't delete the remote branch until you push. Uses a two-tier check (commit ancestry + content diff) that handles regular merges, squash merges, and rebase merges. Unmerged branches are always preserved with a warning.
-- **Zero runtime dependencies** — only Node.js built-ins. Dev deps are TypeScript and @types/node.
-
-## git-stint vs GitButler
-
-| Aspect | git-stint | GitButler |
-|--------|-----------|-----------|
-| Isolation | Default (each branch IS isolated) | Opt-in (unapply other branches) |
-| Branch storage | Real git branches | Virtual branches (TOML + SQLite) |
-| Working dir | One branch per worktree | Permanent octopus merge overlay |
-| Merge engine | Git's built-in | Custom hunk-level engine |
-| Git compatibility | Full — all git tools work | Partial — writes break state |
-| State | JSON manifests (disposable) | SQLite + TOML (can corrupt) |
-| Code size | ~2,000 lines TypeScript + bash | ~100k+ lines Rust |
-| Dependencies | git, gh (optional) | Tauri desktop app |
-
-git-stint is designed for AI agent workflows where sessions are independent and short-lived. GitButler is a full-featured branch management GUI for teams.
+- [Node.js](https://nodejs.org) 20+
+- [git](https://git-scm.com) 2.20+ (worktree support)
+- [`gh` CLI](https://cli.github.com) (optional, for `git stint pr`)
 
 ## Development
 
@@ -376,16 +267,14 @@ npm link          # Install globally for testing
 
 # Run tests
 npm test              # Unit tests
-npm run test:security     # Security tests
-npm run test:integration  # Integration tests
-npm run test:all          # Everything (build + all tests)
+npm run test:all      # Everything (build + all tests)
 ```
 
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and PR guidelines.
 
-Please note that this project is released with a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to abide by its terms.
+This project uses a [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## License
 
