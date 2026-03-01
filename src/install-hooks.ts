@@ -126,6 +126,10 @@ The name becomes the branch (\`stint/<name>\`) and the PR title context.
 
 ## Rules
 
+- **NEVER end or delete a stint session you didn't create.** Other sessions
+  belong to other conversations or agents. Only operate on your own session
+  (the one auto-created by the hook for your edits). Use \`git stint list\` to
+  see all sessions — leave others alone.
 - Do NOT call \`git stint end\` until all changes are committed (code, tests,
   config updates, follow-up tasks). Premature \`end\` kills the session; the
   next edit auto-creates a NEW session, fragmenting work across multiple PRs.
