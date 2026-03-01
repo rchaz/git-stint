@@ -8,10 +8,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [0.3.0] - 2026-02-28
 
 ### Added
-- **Remote branch cleanup** — `end` and `merge` now delete the remote branch when all changes are verified merged into the target branch
+- **Remote branch cleanup** — `end` and `merge` now delete the remote branch when all changes are verified merged on the remote
 - Two-tier merge detection: commit ancestry (`--is-ancestor`) for regular merges, content diff for squash and rebase merges
-- Checks against both the default branch and the current branch (supports non-main workflows like `develop`)
-- Guards against false positives when the main repo is checked out to the session branch
+- Checks against remote tracking refs (`origin/main`), not local branches — a local-only merge won't delete the remote branch until you push, preventing accidental loss of the only remote copy
+- Checks both the default branch and the current branch on the remote (supports non-main workflows like `develop`)
 - Graceful handling of network errors and missing remotes — warnings with manual deletion commands, never blocks the `end` operation
 - Unmerged remote branches are always preserved with a clear warning and the exact `git push origin --delete` command to run manually
 

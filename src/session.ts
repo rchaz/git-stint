@@ -776,20 +776,24 @@ function cleanup(manifest: SessionManifest, force = false): void {
   }
 
   // Check if remote branch should be cleaned up (before deleting local branch,
-  // since we need it for the merge check)
+  // since we need it for the merge check).
+  //
+  // IMPORTANT: We check against REMOTE tracking refs (origin/main), not local
+  // branches. A local `git stint merge` merges into local main, but the user
+  // may not have pushed yet. Deleting the remote session branch before the
+  // remote main has the changes would destroy the only remote copy of the work.
+  // By checking origin/main, we only delete when the remote already has the
+  // changes — matching how GitHub/GitLab auto-delete works.
   let shouldDeleteRemote = false;
   if (git.remoteBranchExists(manifest.branch)) {
-    // Build list of branches to check against. We check both the default branch
-    // (covers PR merges) and the current branch of the main repo (covers
-    // `git stint merge` into non-default branches like 'develop').
+    // Build list of remote tracking refs to check against.
     const targets = new Set<string>();
-    targets.add(git.getDefaultBranch());
+    const defaultBranch = git.getDefaultBranch();
+    targets.add(`origin/${defaultBranch}`);
     try {
       const current = git.currentBranch(topLevel);
-      // Skip if the main repo is on the session branch itself — that would
-      // make --is-ancestor trivially true without an actual merge.
-      if (current !== manifest.branch) {
-        targets.add(current);
+      if (current !== manifest.branch && git.remoteBranchExists(current)) {
+        targets.add(`origin/${current}`);
       }
     } catch { /* detached HEAD — skip */ }
 
