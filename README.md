@@ -1,5 +1,9 @@
 # git-stint
 
+<p align="center">
+  <img src="assets/banner.svg" alt="git-stint — Autonomous git infrastructure for multi-agent engineering" width="100%">
+</p>
+
 [![npm](https://img.shields.io/npm/v/git-stint)](https://www.npmjs.com/package/git-stint)
 [![CI](https://github.com/rchaz/git-stint/actions/workflows/test.yml/badge.svg)](https://github.com/rchaz/git-stint/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
