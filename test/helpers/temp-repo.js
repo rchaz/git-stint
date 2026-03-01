@@ -20,7 +20,7 @@ export function createTempRepo() {
   const dir = mkdtempSync(join(tmpdir(), "git-stint-test-"));
   const originalCwd = process.cwd();
 
-  execFileSync("git", ["init", dir], { stdio: "pipe" });
+  execFileSync("git", ["init", "-b", "main", dir], { stdio: "pipe" });
   execFileSync("git", ["-C", dir, "config", "user.email", "test@git-stint.dev"], { stdio: "pipe" });
   execFileSync("git", ["-C", dir, "config", "user.name", "git-stint-test"], { stdio: "pipe" });
 
