@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" width="400" height="400">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <linearGradient id="branch1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#38bdf8"/>
+      <stop offset="100%" style="stop-color:#818cf8"/>
+    </linearGradient>
+    <linearGradient id="branch2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#34d399"/>
+      <stop offset="100%" style="stop-color:#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="branch3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f472b6"/>
+      <stop offset="100%" style="stop-color:#fb923c"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="400" height="400" rx="40" fill="url(#bg)"/>
+
+  <!-- Main trunk line -->
+  <line x1="80" y1="320" x2="80" y2="80" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Branch point node on main -->
+  <circle cx="80" cy="200" r="10" fill="#94a3b8"/>
+  <circle cx="80" cy="200" r="5" fill="#0f172a"/>
+
+  <!-- Top node on main -->
+  <circle cx="80" cy="100" r="8" fill="#94a3b8"/>
+  <circle cx="80" cy="100" r="4" fill="#0f172a"/>
+
+  <!-- Bottom node on main -->
+  <circle cx="80" cy="300" r="8" fill="#94a3b8"/>
+  <circle cx="80" cy="300" r="4" fill="#0f172a"/>
+
+  <!-- Branch A (top) - curves out from branch point -->
+  <path d="M 80 200 C 120 200, 140 120, 180 120 L 320 120" fill="none" stroke="url(#branch1)" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Agent A node -->
+  <circle cx="320" cy="120" r="10" fill="#38bdf8"/>
+  <circle cx="320" cy="120" r="5" fill="#0f172a"/>
+  <!-- Agent A label -->
+  <text x="320" y="100" text-anchor="middle" fill="#38bdf8" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="13" font-weight="600">Agent A</text>
+
+  <!-- Branch B (middle) - curves out from branch point -->
+  <path d="M 80 200 C 120 200, 140 200, 180 200 L 320 200" fill="none" stroke="url(#branch2)" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Agent B node -->
+  <circle cx="320" cy="200" r="10" fill="#34d399"/>
+  <circle cx="320" cy="200" r="5" fill="#0f172a"/>
+  <!-- Agent B label -->
+  <text x="320" y="180" text-anchor="middle" fill="#34d399" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="13" font-weight="600">Agent B</text>
+
+  <!-- Branch C (bottom) - curves out from branch point -->
+  <path d="M 80 200 C 120 200, 140 280, 180 280 L 320 280" fill="none" stroke="url(#branch3)" stroke-width="3.5" stroke-linecap="round"/>
+  <!-- Agent C node -->
+  <circle cx="320" cy="280" r="10" fill="#f472b6"/>
+  <circle cx="320" cy="280" r="5" fill="#0f172a"/>
+  <!-- Agent C label -->
+  <text x="320" y="260" text-anchor="middle" fill="#f472b6" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="13" font-weight="600">Agent C</text>
+
+  <!-- Main branch label -->
+  <text x="80" y="345" text-anchor="middle" fill="#94a3b8" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="13" font-weight="600">main</text>
+
+  <!-- Small commit dots on branches -->
+  <circle cx="200" cy="120" r="4" fill="#818cf8" opacity="0.7"/>
+  <circle cx="240" cy="120" r="4" fill="#818cf8" opacity="0.5"/>
+  <circle cx="280" cy="120" r="4" fill="#818cf8" opacity="0.3"/>
+
+  <circle cx="200" cy="200" r="4" fill="#38bdf8" opacity="0.7"/>
+  <circle cx="240" cy="200" r="4" fill="#38bdf8" opacity="0.5"/>
+  <circle cx="280" cy="200" r="4" fill="#38bdf8" opacity="0.3"/>
+
+  <circle cx="200" cy="280" r="4" fill="#fb923c" opacity="0.7"/>
+  <circle cx="240" cy="280" r="4" fill="#fb923c" opacity="0.5"/>
+  <circle cx="280" cy="280" r="4" fill="#fb923c" opacity="0.3"/>
+</svg>

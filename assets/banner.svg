@@ -1,0 +1,119 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 400" width="1200" height="400">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#0f172a"/>
+      <stop offset="100%" style="stop-color:#1e293b"/>
+    </linearGradient>
+    <linearGradient id="branch1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#38bdf8"/>
+      <stop offset="100%" style="stop-color:#818cf8"/>
+    </linearGradient>
+    <linearGradient id="branch2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#34d399"/>
+      <stop offset="100%" style="stop-color:#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="branch3" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#f472b6"/>
+      <stop offset="100%" style="stop-color:#fb923c"/>
+    </linearGradient>
+    <linearGradient id="titleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" style="stop-color:#e2e8f0"/>
+      <stop offset="100%" style="stop-color:#f8fafc"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="400" rx="20" fill="url(#bg)"/>
+
+  <!-- Subtle grid pattern -->
+  <g opacity="0.03">
+    <line x1="0" y1="50" x2="1200" y2="50" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="100" x2="1200" y2="100" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="150" x2="1200" y2="150" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="200" x2="1200" y2="200" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="250" x2="1200" y2="250" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="300" x2="1200" y2="300" stroke="#fff" stroke-width="1"/>
+    <line x1="0" y1="350" x2="1200" y2="350" stroke="#fff" stroke-width="1"/>
+  </g>
+
+  <!-- === LEFT SIDE: Logo graphic === -->
+
+  <!-- Main trunk line -->
+  <line x1="100" y1="330" x2="100" y2="70" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+
+  <!-- Branch point node on main -->
+  <circle cx="100" cy="200" r="12" fill="#94a3b8"/>
+  <circle cx="100" cy="200" r="6" fill="#0f172a"/>
+
+  <!-- Top node on main -->
+  <circle cx="100" cy="90" r="8" fill="#94a3b8"/>
+  <circle cx="100" cy="90" r="4" fill="#0f172a"/>
+
+  <!-- Bottom node on main -->
+  <circle cx="100" cy="310" r="8" fill="#94a3b8"/>
+  <circle cx="100" cy="310" r="4" fill="#0f172a"/>
+
+  <!-- Branch A (top) -->
+  <path d="M 100 200 C 140 200, 160 110, 200 110 L 400 110" fill="none" stroke="url(#branch1)" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="400" cy="110" r="10" fill="#38bdf8"/>
+  <circle cx="400" cy="110" r="5" fill="#0f172a"/>
+
+  <!-- Branch B (middle) -->
+  <path d="M 100 200 C 140 200, 160 200, 200 200 L 400 200" fill="none" stroke="url(#branch2)" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="400" cy="200" r="10" fill="#34d399"/>
+  <circle cx="400" cy="200" r="5" fill="#0f172a"/>
+
+  <!-- Branch C (bottom) -->
+  <path d="M 100 200 C 140 200, 160 290, 200 290 L 400 290" fill="none" stroke="url(#branch3)" stroke-width="3.5" stroke-linecap="round"/>
+  <circle cx="400" cy="290" r="10" fill="#f472b6"/>
+  <circle cx="400" cy="290" r="5" fill="#0f172a"/>
+
+  <!-- Small commit dots on branches -->
+  <circle cx="240" cy="110" r="4" fill="#818cf8" opacity="0.7"/>
+  <circle cx="300" cy="110" r="4" fill="#818cf8" opacity="0.5"/>
+  <circle cx="360" cy="110" r="4" fill="#818cf8" opacity="0.3"/>
+
+  <circle cx="240" cy="200" r="4" fill="#38bdf8" opacity="0.7"/>
+  <circle cx="300" cy="200" r="4" fill="#38bdf8" opacity="0.5"/>
+  <circle cx="360" cy="200" r="4" fill="#38bdf8" opacity="0.3"/>
+
+  <circle cx="240" cy="290" r="4" fill="#fb923c" opacity="0.7"/>
+  <circle cx="300" cy="290" r="4" fill="#fb923c" opacity="0.5"/>
+  <circle cx="360" cy="290" r="4" fill="#fb923c" opacity="0.3"/>
+
+  <!-- Branch labels -->
+  <text x="415" y="115" fill="#38bdf8" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="14" font-weight="500" opacity="0.8">Agent A</text>
+  <text x="415" y="205" fill="#34d399" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="14" font-weight="500" opacity="0.8">Agent B</text>
+  <text x="415" y="295" fill="#f472b6" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="14" font-weight="500" opacity="0.8">Agent C</text>
+
+  <!-- Main label -->
+  <text x="100" y="355" text-anchor="middle" fill="#94a3b8" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="13" font-weight="600">main</text>
+
+  <!-- === RIGHT SIDE: Text === -->
+
+  <!-- Divider line -->
+  <line x1="530" y1="80" x2="530" y2="320" stroke="#334155" stroke-width="1" opacity="0.5"/>
+
+  <!-- git-stint title -->
+  <text x="580" y="155" fill="url(#titleGrad)" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="56" font-weight="700" letter-spacing="-2">git-stint</text>
+
+  <!-- Tagline -->
+  <text x="580" y="200" fill="#94a3b8" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="400">Built for AI agents to multitask safely.</text>
+
+  <!-- Feature pills -->
+  <!-- Pill 1 -->
+  <rect x="580" y="230" width="150" height="30" rx="15" fill="#38bdf8" opacity="0.12"/>
+  <text x="655" y="250" text-anchor="middle" fill="#38bdf8" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="12" font-weight="500">autonomous</text>
+
+  <!-- Pill 2 -->
+  <rect x="740" y="230" width="130" height="30" rx="15" fill="#34d399" opacity="0.12"/>
+  <text x="805" y="250" text-anchor="middle" fill="#34d399" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="12" font-weight="500">zero deps</text>
+
+  <!-- Pill 3 -->
+  <rect x="880" y="230" width="130" height="30" rx="15" fill="#f472b6" opacity="0.12"/>
+  <text x="945" y="250" text-anchor="middle" fill="#f472b6" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="12" font-weight="500">just git</text>
+
+  <!-- Subtext -->
+  <text x="580" y="295" fill="#64748b" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15">Every agent gets its own branch, worktree, and lifecycle.</text>
+  <text x="580" y="317" fill="#64748b" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="15">Autonomous git infrastructure for multi-agent engineering.</text>
+</svg>
