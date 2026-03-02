@@ -98,7 +98,7 @@
   <text x="580" y="155" fill="url(#titleGrad)" font-family="ui-monospace, 'SF Mono', 'Cascadia Code', monospace" font-size="56" font-weight="700" letter-spacing="-2">git-stint</text>
 
   <!-- Tagline -->
-  <text x="580" y="200" fill="#94a3b8" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="400">Built for AI agents to multitask safely.</text>
+  <text x="580" y="200" fill="#94a3b8" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif" font-size="22" font-weight="400">Built for AI agents to multitask without collisions.</text>
 
   <!-- Feature pills -->
   <!-- Pill 1 -->
