@@ -96,7 +96,7 @@ export function install(scope: "project" | "user"): void {
 
 const DEFAULT_CONFIG = {
   shared_dirs: [],
-  main_branch_policy: "prompt",
+  main_branch_policy: "block",
   force_cleanup: "prompt",
   adopt_changes: "always",
 };

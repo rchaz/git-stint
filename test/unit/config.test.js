@@ -18,7 +18,7 @@ describe("config", () => {
   it("returns defaults when no .stint.json exists", () => {
     const config = loadConfig(dir);
     assert.deepStrictEqual(config.shared_dirs, []);
-    assert.equal(config.main_branch_policy, "prompt");
+    assert.equal(config.main_branch_policy, "block");
     assert.equal(config.force_cleanup, "prompt");
   });
 
@@ -38,7 +38,7 @@ describe("config", () => {
     writeFileSync(join(dir, ".stint.json"), "not json{{{");
     const config = loadConfig(dir);
     assert.deepStrictEqual(config.shared_dirs, []);
-    assert.equal(config.main_branch_policy, "prompt");
+    assert.equal(config.main_branch_policy, "block");
   });
 
   it("ignores invalid policy values", () => {
@@ -47,7 +47,7 @@ describe("config", () => {
       force_cleanup: 42,
     }));
     const config = loadConfig(dir);
-    assert.equal(config.main_branch_policy, "prompt");
+    assert.equal(config.main_branch_policy, "block");
     assert.equal(config.force_cleanup, "prompt");
   });
 
@@ -63,7 +63,7 @@ describe("config", () => {
     writeFileSync(join(dir, ".stint.json"), "{}");
     const config = loadConfig(dir);
     assert.deepStrictEqual(config.shared_dirs, []);
-    assert.equal(config.main_branch_policy, "prompt");
+    assert.equal(config.main_branch_policy, "block");
     assert.equal(config.force_cleanup, "prompt");
   });
 

@@ -295,7 +295,7 @@ describe("install-hooks / uninstall-hooks", () => {
       assert.ok(existsSync(configPath), ".stint.json should be created");
       const config = JSON.parse(readFileSync(configPath, "utf-8"));
       assert.deepStrictEqual(config.shared_dirs, []);
-      assert.equal(config.main_branch_policy, "prompt");
+      assert.equal(config.main_branch_policy, "block");
       assert.equal(config.force_cleanup, "prompt");
       assert.equal(config.adopt_changes, "always");
     } finally {

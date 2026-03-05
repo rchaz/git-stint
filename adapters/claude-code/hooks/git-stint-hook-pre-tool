@@ -80,7 +80,7 @@ if git check-ignore -q "$FILE_PATH" 2>/dev/null; then
 fi
 
 # --- Read .stint.json config for main_branch_policy ---
-MAIN_BRANCH_POLICY="prompt"  # default
+MAIN_BRANCH_POLICY="block"  # default
 STINT_CONFIG="$REPO_ROOT/.stint.json"
 if [ -f "$STINT_CONFIG" ]; then
   if command -v jq &>/dev/null; then
