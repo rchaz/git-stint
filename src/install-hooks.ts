@@ -141,6 +141,12 @@ The name becomes the branch (\`stint/<name>\`) and the PR title context.
 - Directories listed under \`shared_dirs\` in \`.stint.json\` are symlinked into
   worktrees pointing to the main repo's real directories. They must never be
   staged or committed. The hooks auto-add them to the worktree's \`.gitignore\`.
+
+## Runtime
+
+- Run tests and services from the worktree (your CWD), not the main repo. If
+  you spot paths or dependencies resolving back to main, warn the user.
+- Use a non-default port to avoid collisions with other sessions.
 `;
 
 function scaffoldConfig(repoRoot: string): void {
