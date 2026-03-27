@@ -151,6 +151,19 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
 
   // Adopt uncommitted changes from main repo (before symlinking, to avoid conflicts)
   const config = loadConfig(topLevel);
+
+  // Snapshot shared_files and .stint.json BEFORE adopt stash (which moves
+  // untracked files out of main). Without this, session 2 would find .env
+  // missing because session 1's adopt already moved it.
+  const configPath = join(topLevel, ".stint.json");
+  const configSnapshot = existsSync(configPath) ? readFileSync(configPath) : null;
+  const sharedFileSnapshots = new Map<string, Buffer>();
+  for (const file of config.shared_files) {
+    const source = resolve(topLevel, file);
+    if (!source.startsWith(topLevel + "/")) continue;
+    if (existsSync(source)) sharedFileSnapshots.set(file, readFileSync(source));
+  }
+
   const shouldAdopt = adoptOverride !== undefined
     ? adoptOverride
     : config.adopt_changes === "always";
@@ -176,6 +189,18 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
         // Nothing to stash (git stash can fail if changes are only untracked and gitignored)
         adoptedFiles = 0;
       }
+    }
+  }
+
+  // Restore .stint.json and shared_files to main after adopt stash moved them
+  if (configSnapshot && !existsSync(configPath)) {
+    writeFileSync(configPath, configSnapshot);
+  }
+  for (const [file, content] of sharedFileSnapshots) {
+    const source = resolve(topLevel, file);
+    if (!existsSync(source)) {
+      mkdirSync(dirname(source), { recursive: true });
+      writeFileSync(source, content);
     }
   }
 
@@ -228,6 +253,34 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
     }
   }
 
+  // Copy shared files into worktree from pre-adopt snapshots.
+  // Path traversal entries were already filtered during snapshot capture.
+  const copiedFiles: string[] = [];
+  for (const file of config.shared_files) {
+    const target = resolve(worktreeAbs, file);
+    if (existsSync(target)) continue; // already present from adopt or git
+    const content = sharedFileSnapshots.get(file);
+    if (!content) {
+      console.warn(`Warning: shared_files entry '${file}' not found in repo, skipping.`);
+      continue;
+    }
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, content);
+    copiedFiles.push(file);
+  }
+
+  // Run post_create hooks in the new worktree
+  for (const cmd of config.post_create) {
+    try {
+      execFileSync("sh", ["-c", cmd], { cwd: worktreeAbs, stdio: ["pipe", "pipe", "pipe"], timeout: 300_000 });
+    } catch (err) {
+      const e = err as { stderr?: Buffer | string; message?: string };
+      const stderr = e.stderr ? e.stderr.toString().trim() : (e.message || "unknown error");
+      console.warn(`Warning: post_create command failed: ${cmd}`);
+      console.warn(`  ${stderr}`);
+    }
+  }
+
   // Revoke main-branch write pass when entering session mode
   removeAllowMainFlag();
 
@@ -256,9 +309,18 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
     }
   }
 
+  if (copiedFiles.length > 0) {
+    console.log(`\nShared files (copied into worktree):`);
+    for (const f of copiedFiles) {
+      console.log(`  ${f}`);
+    }
+  }
+
   if (adoptedFiles > 0) {
     console.log(`\nCarried over ${adoptedFiles} uncommitted file(s) into session.`);
   }
+
+
 
   console.log(`\ncd "${worktreeAbs}"`);
 }

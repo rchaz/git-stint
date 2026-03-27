@@ -3,6 +3,8 @@ import { join } from "node:path";
 
 export interface StintConfig {
   shared_dirs: string[];
+  shared_files: string[];
+  post_create: string[];
   main_branch_policy: "prompt" | "allow" | "block";
   force_cleanup: "prompt" | "force" | "fail";
   adopt_changes: "always" | "never" | "prompt";
@@ -10,6 +12,8 @@ export interface StintConfig {
 
 const DEFAULTS: StintConfig = {
   shared_dirs: [],
+  shared_files: [],
+  post_create: [],
   main_branch_policy: "block",
   force_cleanup: "prompt",
   adopt_changes: "always",
@@ -42,6 +46,20 @@ export function loadConfig(repoRoot: string): StintConfig {
     config.shared_dirs = obj.shared_dirs.filter(
       (d): d is string => typeof d === "string" && d.length > 0,
     );
+  }
+
+  if (Array.isArray(obj.shared_files)) {
+    config.shared_files = obj.shared_files.filter(
+      (f): f is string => typeof f === "string" && f.length > 0,
+    );
+  }
+
+  if (Array.isArray(obj.post_create)) {
+    config.post_create = obj.post_create.filter(
+      (c): c is string => typeof c === "string" && c.length > 0,
+    );
+  } else if (typeof obj.post_create === "string" && obj.post_create.length > 0) {
+    config.post_create = [obj.post_create];
   }
 
   if (typeof obj.main_branch_policy === "string" && VALID_POLICIES.has(obj.main_branch_policy)) {

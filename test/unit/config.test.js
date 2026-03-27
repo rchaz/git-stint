@@ -97,4 +97,54 @@ describe("config", () => {
     writeFileSync(join(dir, ".stint.json"), JSON.stringify({ adopt_changes: 42 }));
     assert.equal(loadConfig(dir).adopt_changes, "always");
   });
+
+  it("defaults shared_files to empty array", () => {
+    const config = loadConfig(dir);
+    assert.deepStrictEqual(config.shared_files, []);
+  });
+
+  it("parses shared_files array", () => {
+    writeFileSync(join(dir, ".stint.json"), JSON.stringify({
+      shared_files: [".env", ".python-version"],
+    }));
+    const config = loadConfig(dir);
+    assert.deepStrictEqual(config.shared_files, [".env", ".python-version"]);
+  });
+
+  it("filters non-string entries from shared_files", () => {
+    writeFileSync(join(dir, ".stint.json"), JSON.stringify({
+      shared_files: [".env", 123, "", null, ".python-version"],
+    }));
+    const config = loadConfig(dir);
+    assert.deepStrictEqual(config.shared_files, [".env", ".python-version"]);
+  });
+
+  it("defaults post_create to empty array", () => {
+    const config = loadConfig(dir);
+    assert.deepStrictEqual(config.post_create, []);
+  });
+
+  it("parses post_create array", () => {
+    writeFileSync(join(dir, ".stint.json"), JSON.stringify({
+      post_create: ["uv sync", "echo done"],
+    }));
+    const config = loadConfig(dir);
+    assert.deepStrictEqual(config.post_create, ["uv sync", "echo done"]);
+  });
+
+  it("accepts a single string for post_create", () => {
+    writeFileSync(join(dir, ".stint.json"), JSON.stringify({
+      post_create: "npm install",
+    }));
+    const config = loadConfig(dir);
+    assert.deepStrictEqual(config.post_create, ["npm install"]);
+  });
+
+  it("filters non-string entries from post_create", () => {
+    writeFileSync(join(dir, ".stint.json"), JSON.stringify({
+      post_create: ["uv sync", 42, "", null],
+    }));
+    const config = loadConfig(dir);
+    assert.deepStrictEqual(config.post_create, ["uv sync"]);
+  });
 });
