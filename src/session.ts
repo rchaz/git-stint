@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { copyFileSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, statSync, symlinkSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import * as git from "./git.js";
 import { loadConfig } from "./config.js";
@@ -151,6 +151,19 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
 
   // Adopt uncommitted changes from main repo (before symlinking, to avoid conflicts)
   const config = loadConfig(topLevel);
+
+  // Snapshot shared_files and .stint.json BEFORE adopt stash (which moves
+  // untracked files out of main). Without this, session 2 would find .env
+  // missing because session 1's adopt already moved it.
+  const configPath = join(topLevel, ".stint.json");
+  const configSnapshot = existsSync(configPath) ? readFileSync(configPath) : null;
+  const sharedFileSnapshots = new Map<string, Buffer>();
+  for (const file of config.shared_files) {
+    const source = resolve(topLevel, file);
+    if (!source.startsWith(topLevel + "/")) continue;
+    if (existsSync(source)) sharedFileSnapshots.set(file, readFileSync(source));
+  }
+
   const shouldAdopt = adoptOverride !== undefined
     ? adoptOverride
     : config.adopt_changes === "always";
@@ -176,6 +189,18 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
         // Nothing to stash (git stash can fail if changes are only untracked and gitignored)
         adoptedFiles = 0;
       }
+    }
+  }
+
+  // Restore .stint.json and shared_files to main after adopt stash moved them
+  if (configSnapshot && !existsSync(configPath)) {
+    writeFileSync(configPath, configSnapshot);
+  }
+  for (const [file, content] of sharedFileSnapshots) {
+    const source = resolve(topLevel, file);
+    if (!existsSync(source)) {
+      mkdirSync(dirname(source), { recursive: true });
+      writeFileSync(source, content);
     }
   }
 
@@ -228,38 +253,31 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
     }
   }
 
-  // Copy shared files from main repo into worktree
+  // Copy shared files into worktree from pre-adopt snapshots.
+  // Path traversal entries were already filtered during snapshot capture.
   const copiedFiles: string[] = [];
-  for (const filePattern of config.shared_files) {
-    // Prevent path traversal outside the repo
-    const source = resolve(topLevel, filePattern);
-    if (!source.startsWith(topLevel + "/")) {
-      console.warn(`Warning: shared_files entry '${filePattern}' escapes repo root, skipping.`);
+  for (const file of config.shared_files) {
+    const target = resolve(worktreeAbs, file);
+    if (existsSync(target)) continue; // already present from adopt or git
+    const content = sharedFileSnapshots.get(file);
+    if (!content) {
+      console.warn(`Warning: shared_files entry '${file}' not found in repo, skipping.`);
       continue;
     }
-    const target = resolve(worktreeAbs, filePattern);
-    if (!existsSync(source)) {
-      console.warn(`Warning: shared_files entry '${filePattern}' not found in repo, skipping.`);
-      continue;
-    }
-    if (existsSync(target)) continue; // already exists (e.g., tracked in git or adopted from stash)
     mkdirSync(dirname(target), { recursive: true });
-    copyFileSync(source, target);
-    copiedFiles.push(filePattern);
+    writeFileSync(target, content);
+    copiedFiles.push(file);
   }
 
   // Run post_create hooks in the new worktree
-  const hookResults: { cmd: string; ok: boolean }[] = [];
   for (const cmd of config.post_create) {
     try {
       execFileSync("sh", ["-c", cmd], { cwd: worktreeAbs, stdio: ["pipe", "pipe", "pipe"], timeout: 300_000 });
-      hookResults.push({ cmd, ok: true });
     } catch (err) {
       const e = err as { stderr?: Buffer | string; message?: string };
       const stderr = e.stderr ? e.stderr.toString().trim() : (e.message || "unknown error");
       console.warn(`Warning: post_create command failed: ${cmd}`);
       console.warn(`  ${stderr}`);
-      hookResults.push({ cmd, ok: false });
     }
   }
 
@@ -302,11 +320,7 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
     console.log(`\nCarried over ${adoptedFiles} uncommitted file(s) into session.`);
   }
 
-  if (hookResults.length > 0) {
-    const passed = hookResults.filter((r) => r.ok).length;
-    const failed = hookResults.length - passed;
-    console.log(`\npost_create: ${passed} command(s) succeeded${failed > 0 ? `, ${failed} failed` : ""}.`);
-  }
+
 
   console.log(`\ncd "${worktreeAbs}"`);
 }

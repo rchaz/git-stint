@@ -104,6 +104,26 @@ describe("shared_files", () => {
     assert.ok(!existsSync(join(wt, "../../../etc/passwd")));
     end("traversal-test");
   });
+
+  it("survives multi-session with adopt_changes=always", () => {
+    writeFileSync(join(repo.dir, ".env"), "SECRET=abc\n");
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({
+      shared_files: [".env"],
+      adopt_changes: "always",
+    }));
+
+    start("multi-1");
+    const wt1 = getWorktreePath(loadManifest("multi-1"));
+    assert.equal(readFileSync(join(wt1, ".env"), "utf-8"), "SECRET=abc\n");
+    assert.ok(existsSync(join(repo.dir, ".env")), ".env should be restored to main after adopt");
+
+    start("multi-2");
+    const wt2 = getWorktreePath(loadManifest("multi-2"));
+    assert.equal(readFileSync(join(wt2, ".env"), "utf-8"), "SECRET=abc\n");
+
+    end("multi-1");
+    end("multi-2");
+  });
 });
 
 describe("post_create", () => {
