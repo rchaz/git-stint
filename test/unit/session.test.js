@@ -22,6 +22,7 @@ import {
   prune,
   which,
   allowMain,
+  resume,
 } from "../../dist/session.js";
 import {
   loadManifest,
@@ -1000,6 +1001,85 @@ describe("allowMain()", () => {
       end("which-wt");
     });
   });
+
+describe("resume()", () => {
+  let repo;
+
+  beforeEach(() => {
+    repo = createTempRepo();
+  });
+  afterEach(() => {
+    repo.cleanup();
+  });
+
+  it("rebinds session to a new client ID", () => {
+    start("resume-test", "old-client-123");
+    const m1 = loadManifest("resume-test");
+    assert.equal(m1.clientId, "old-client-123");
+
+    resume("resume-test", "new-client-456");
+    const m2 = loadManifest("resume-test");
+    assert.equal(m2.clientId, "new-client-456");
+
+    end("resume-test");
+  });
+
+  it("uses process.ppid when no client ID specified", () => {
+    start("resume-ppid");
+    resume("resume-ppid");
+    const m = loadManifest("resume-ppid");
+    assert.equal(m.clientId, String(process.ppid));
+
+    end("resume-ppid");
+  });
+
+  it("throws when session not found", () => {
+    assert.throws(() => resume("nonexistent"), /not found/);
+  });
+
+  it("throws when session name is empty", () => {
+    assert.throws(() => resume(""), /required/);
+  });
+
+  it("throws when worktree is missing", () => {
+    start("resume-missing-wt");
+    const m = loadManifest("resume-missing-wt");
+    const wt = getWorktreePath(m);
+    rmSync(wt, { recursive: true, force: true });
+
+    assert.throws(() => resume("resume-missing-wt"), /Worktree missing/);
+
+    prune();
+  });
+
+  it("handles already-bound client gracefully", () => {
+    start("resume-same", "client-99");
+    const logs = captureConsole(() => resume("resume-same", "client-99"));
+    assert.ok(logs.some((l) => l.includes("already bound")));
+
+    end("resume-same");
+  });
+
+  it("preserves session state after resume", () => {
+    start("resume-state", "old-client");
+    const m1 = loadManifest("resume-state");
+    const wt = getWorktreePath(m1);
+
+    writeFileSync(join(wt, "file.txt"), "hello\n");
+    sessionCommit("Add file", "resume-state");
+
+    resume("resume-state", "new-client");
+    const m2 = loadManifest("resume-state");
+
+    assert.equal(m2.clientId, "new-client");
+    assert.equal(m2.changesets.length, 1);
+    assert.equal(m2.changesets[0].message, "Add file");
+    assert.equal(m2.branch, "stint/resume-state");
+    assert.equal(m2.startedAt, m1.startedAt);
+
+    end("resume-state");
+  });
+});
 
 // --- Helpers ---
 
