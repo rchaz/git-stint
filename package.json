@@ -1,6 +1,6 @@
 {
   "name": "git-stint",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Session-scoped change tracking for AI coding agents",
   "type": "module",
   "bin": {
