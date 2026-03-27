@@ -90,6 +90,20 @@ describe("shared_files", () => {
     assert.equal(readFileSync(join(wt, "config/secrets.yaml"), "utf-8"), "key: value\n");
     end("nested-file");
   });
+
+  it("rejects path traversal attempts", () => {
+    writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({
+      shared_files: ["../../../etc/passwd"],
+      adopt_changes: "never",
+    }));
+
+    // Should not throw, but should skip the traversal path
+    start("traversal-test");
+    const m = loadManifest("traversal-test");
+    const wt = getWorktreePath(m);
+    assert.ok(!existsSync(join(wt, "../../../etc/passwd")));
+    end("traversal-test");
+  });
 });
 
 describe("post_create", () => {

@@ -231,7 +231,12 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
   // Copy shared files from main repo into worktree
   const copiedFiles: string[] = [];
   for (const filePattern of config.shared_files) {
+    // Prevent path traversal outside the repo
     const source = resolve(topLevel, filePattern);
+    if (!source.startsWith(topLevel + "/")) {
+      console.warn(`Warning: shared_files entry '${filePattern}' escapes repo root, skipping.`);
+      continue;
+    }
     const target = resolve(worktreeAbs, filePattern);
     if (!existsSync(source)) {
       console.warn(`Warning: shared_files entry '${filePattern}' not found in repo, skipping.`);
