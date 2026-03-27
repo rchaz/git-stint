@@ -152,6 +152,8 @@ Create a `.stint.json` in your repo root:
 ```json
 {
   "shared_dirs": ["node_modules", ".venv", "dist"],
+  "shared_files": [".env", ".python-version"],
+  "post_create": ["uv sync"],
   "main_branch_policy": "block",
   "force_cleanup": "prompt",
   "adopt_changes": "always"
@@ -161,6 +163,8 @@ Create a `.stint.json` in your repo root:
 | Field | Values | Default | Description |
 |-------|--------|---------|-------------|
 | `shared_dirs` | `string[]` | `[]` | Directories to symlink from worktree to main repo. Use for gitignored dirs (caches, build outputs) that shouldn't be duplicated per session. |
+| `shared_files` | `string[]` | `[]` | Files to copy from main repo into each new worktree. Use for untracked config files (`.env`, `.python-version`) that each worktree needs its own copy of. |
+| `post_create` | `string[]` or `string` | `[]` | Shell command(s) to run in the new worktree after creation. Use for project setup (e.g., `uv sync`, `pip install -r requirements.txt`). Commands run sequentially; failures warn but don't abort session creation. |
 | `main_branch_policy` | `"block"` / `"prompt"` / `"allow"` | `"prompt"` | What happens when an agent writes to main. `"block"` auto-creates a session. `"prompt"` blocks with instructions. `"allow"` passes through. |
 | `force_cleanup` | `"force"` / `"prompt"` / `"fail"` | `"prompt"` | Behavior when worktree removal fails. |
 | `adopt_changes` | `"always"` / `"never"` / `"prompt"` | `"always"` | Whether uncommitted changes on main carry into new sessions. |
@@ -187,6 +191,30 @@ When you run `git stint start` with uncommitted changes on main:
 git stint start my-feature --adopt       # Force adopt regardless of config
 git stint start my-feature --no-adopt    # Skip regardless of config
 ```
+
+### Shared Files
+
+Unlike `shared_dirs` (which symlinks directories so changes are shared), `shared_files` copies files into each new worktree. This is ideal for untracked config files that each worktree needs its own copy of:
+
+```json
+{
+  "shared_files": [".env", ".python-version", "config/local.yaml"]
+}
+```
+
+Files that don't exist are skipped with a warning. Files already present in the worktree (e.g., tracked by git) are not overwritten.
+
+### Post-Create Hooks
+
+Run setup commands automatically after worktree creation. Commands execute in the new worktree directory:
+
+```json
+{
+  "post_create": ["uv sync", "cp .env.example .env"]
+}
+```
+
+A single string is also accepted: `"post_create": "npm install"`. Commands run sequentially. A failing command prints a warning but does not prevent session creation — subsequent commands still run.
 
 ## How It Works
 
