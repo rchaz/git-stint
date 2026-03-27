@@ -21,6 +21,7 @@ import {
   end,
   abort,
   prune,
+  resume,
 } from "../../dist/session.js";
 import {
   loadManifest,
@@ -31,6 +32,38 @@ import { checkConflicts } from "../../dist/conflicts.js";
 import * as git from "../../dist/git.js";
 
 let repo;
+
+describe("integration: resume session after client change", () => {
+  beforeEach(() => {
+    repo = createTempRepo();
+  });
+  afterEach(() => {
+    repo.cleanup();
+  });
+
+  it("start -> commit -> resume with new client -> commit -> end", () => {
+    start("resume-lifecycle", "client-1");
+    const m1 = loadManifest("resume-lifecycle");
+    const wt = getWorktreePath(m1);
+
+    writeFileSync(join(wt, "part1.ts"), "export const step1 = true;\n");
+    sessionCommit("Part 1", "resume-lifecycle");
+    assert.equal(loadManifest("resume-lifecycle").changesets.length, 1);
+
+    resume("resume-lifecycle", "client-2");
+    const m2 = loadManifest("resume-lifecycle");
+    assert.equal(m2.clientId, "client-2");
+    assert.equal(m2.changesets.length, 1);
+
+    writeFileSync(join(wt, "part2.ts"), "export const step2 = true;\n");
+    sessionCommit("Part 2", "resume-lifecycle");
+    assert.equal(loadManifest("resume-lifecycle").changesets.length, 2);
+
+    end("resume-lifecycle");
+    assert.equal(loadManifest("resume-lifecycle"), null);
+    assert.ok(!existsSync(wt));
+  });
+});
 
 describe("integration: full session lifecycle", () => {
   beforeEach(() => {

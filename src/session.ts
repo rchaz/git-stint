@@ -881,6 +881,64 @@ export function pruneAllowMainFlags(): void {
 }
 
 /**
+ * Resume an existing session by rebinding it to the current client.
+ * Updates the clientId so hooks route writes to this session's worktree.
+ *
+ * @param name - Session name to resume
+ * @param clientId - Explicit client ID. If not provided, falls back to process.ppid.
+ */
+export function resume(name: string, clientId?: string): void {
+  if (!git.isInsideGitRepo()) {
+    throw new Error("Not inside a git repository.");
+  }
+
+  if (!name || name.trim().length === 0) {
+    throw new Error("Session name is required. Usage: git stint resume <name>");
+  }
+
+  const manifest = loadManifest(name);
+  if (!manifest) {
+    throw new Error(
+      `Session '${name}' not found.\n` +
+      `Run 'git stint list' to see active sessions.`,
+    );
+  }
+
+  // Verify the worktree still exists
+  const worktree = getWorktreePath(manifest);
+  if (!existsSync(worktree)) {
+    throw new Error(
+      `Worktree missing for session '${name}' at ${worktree}.\n` +
+      `Run 'git stint prune' to clean up, then start a new session.`,
+    );
+  }
+
+  const newClientId = clientId || String(process.ppid);
+
+  // Check if already bound to this client
+  if (manifest.clientId === newClientId) {
+    console.log(`Session '${name}' is already bound to client ${newClientId}.`);
+    console.log(`\ncd "${worktree}"`);
+    return;
+  }
+
+  const oldClientId = manifest.clientId;
+  manifest.clientId = newClientId;
+  saveManifest(manifest);
+
+  console.log(`Session '${name}' resumed.`);
+  if (oldClientId) {
+    console.log(`  Client: ${oldClientId} \u2192 ${newClientId}`);
+  } else {
+    console.log(`  Client: ${newClientId}`);
+  }
+  console.log(`  Branch:   ${manifest.branch}`);
+  console.log(`  Worktree: ${worktree}`);
+  console.log(`  Commits:  ${manifest.changesets.length}`);
+  console.log(`\ncd "${worktree}"`);
+}
+
+/**
  * Create per-process flag file allowing writes to main branch.
  * Scoped to a client ID (typically Claude Code's PID), so other
  * instances remain blocked.

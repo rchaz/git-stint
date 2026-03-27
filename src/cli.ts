@@ -144,6 +144,17 @@ try {
       break;
     }
 
+    case "resume": {
+      const name = getPositional(0);
+      if (!name) {
+        console.error("Usage: git stint resume <session-name>");
+        process.exit(1);
+      }
+      const clientId = getFlag("--client-id");
+      session.resume(name, clientId);
+      break;
+    }
+
     case "undo": {
       session.undo(getFlag("--session"));
       break;
@@ -275,6 +286,7 @@ Commands:
   squash -m "msg"           Collapse all commits into one
   merge                     Merge session into main (no PR)
   pr [--title "..."]        Push branch and create GitHub PR
+  resume <name>             Rebind session to current client (after restart)
   end                       Finalize session, clean up everything
   abort                     Discard session — delete all changes
   undo                      Revert last commit, changes become pending
