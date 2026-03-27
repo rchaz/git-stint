@@ -1,6 +1,6 @@
 import { describe, it, beforeEach, afterEach } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
 import { createTempRepo } from "../helpers/temp-repo.js";
@@ -17,12 +17,10 @@ describe("shared_files", () => {
     repo.cleanup();
   });
 
-  it("copies configured files into new worktree", () => {
-    // Create files to share
+  it("symlinks configured files into new worktree", () => {
     writeFileSync(join(repo.dir, ".env"), "SECRET=abc123\n");
     writeFileSync(join(repo.dir, ".python-version"), "3.12\n");
 
-    // Configure shared_files
     writeFileSync(join(repo.dir, ".stint.json"), JSON.stringify({
       shared_files: [".env", ".python-version"],
     }));
@@ -31,8 +29,9 @@ describe("shared_files", () => {
     const m = loadManifest("shared-test");
     const wt = getWorktreePath(m);
 
-    assert.ok(existsSync(join(wt, ".env")), ".env should be copied to worktree");
-    assert.ok(existsSync(join(wt, ".python-version")), ".python-version should be copied");
+    assert.ok(existsSync(join(wt, ".env")), ".env should exist in worktree");
+    assert.ok(lstatSync(join(wt, ".env")).isSymbolicLink(), ".env should be a symlink");
+    assert.ok(lstatSync(join(wt, ".python-version")).isSymbolicLink(), ".python-version should be a symlink");
     assert.equal(readFileSync(join(wt, ".env"), "utf-8"), "SECRET=abc123\n");
     assert.equal(readFileSync(join(wt, ".python-version"), "utf-8"), "3.12\n");
 
@@ -75,7 +74,7 @@ describe("shared_files", () => {
     end("no-overwrite");
   });
 
-  it("copies files in nested directories", () => {
+  it("symlinks files in nested directories", () => {
     mkdirSync(join(repo.dir, "config"), { recursive: true });
     writeFileSync(join(repo.dir, "config/secrets.yaml"), "key: value\n");
 
@@ -86,7 +85,7 @@ describe("shared_files", () => {
     start("nested-file");
     const m = loadManifest("nested-file");
     const wt = getWorktreePath(m);
-    assert.ok(existsSync(join(wt, "config/secrets.yaml")));
+    assert.ok(lstatSync(join(wt, "config/secrets.yaml")).isSymbolicLink());
     assert.equal(readFileSync(join(wt, "config/secrets.yaml"), "utf-8"), "key: value\n");
     end("nested-file");
   });
@@ -120,6 +119,11 @@ describe("shared_files", () => {
     start("multi-2");
     const wt2 = getWorktreePath(loadManifest("multi-2"));
     assert.equal(readFileSync(join(wt2, ".env"), "utf-8"), "SECRET=abc\n");
+
+    // Symlinks propagate changes from main
+    writeFileSync(join(repo.dir, ".env"), "SECRET=rotated\n");
+    assert.equal(readFileSync(join(wt1, ".env"), "utf-8"), "SECRET=rotated\n");
+    assert.equal(readFileSync(join(wt2, ".env"), "utf-8"), "SECRET=rotated\n");
 
     end("multi-1");
     end("multi-2");

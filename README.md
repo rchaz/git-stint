@@ -163,7 +163,7 @@ Create a `.stint.json` in your repo root:
 | Field | Values | Default | Description |
 |-------|--------|---------|-------------|
 | `shared_dirs` | `string[]` | `[]` | Directories to symlink from worktree to main repo. Use for gitignored dirs (caches, build outputs) that shouldn't be duplicated per session. |
-| `shared_files` | `string[]` | `[]` | Files to copy from main repo into each new worktree. Use for untracked config files (`.env`, `.python-version`) that each worktree needs its own copy of. |
+| `shared_files` | `string[]` | `[]` | Files to symlink from main repo into each new worktree. Like `shared_dirs` but for individual files — use for untracked config files (`.env.keys`, `service-account.json`) that should stay in sync with main. |
 | `post_create` | `string[]` or `string` | `[]` | Shell command(s) to run in the new worktree after creation. Use for project setup (e.g., `uv sync`, `pip install -r requirements.txt`). Commands run sequentially; failures warn but don't abort session creation. |
 | `main_branch_policy` | `"block"` / `"prompt"` / `"allow"` | `"prompt"` | What happens when an agent writes to main. `"block"` auto-creates a session. `"prompt"` blocks with instructions. `"allow"` passes through. |
 | `force_cleanup` | `"force"` / `"prompt"` / `"fail"` | `"prompt"` | Behavior when worktree removal fails. |
@@ -194,15 +194,15 @@ git stint start my-feature --no-adopt    # Skip regardless of config
 
 ### Shared Files
 
-Unlike `shared_dirs` (which symlinks directories so changes are shared), `shared_files` copies files into each new worktree. This is ideal for untracked config files that each worktree needs its own copy of:
+Like `shared_dirs` but for individual files. Symlinks each file from main into the worktree so changes stay in sync:
 
 ```json
 {
-  "shared_files": [".env", ".python-version", "config/local.yaml"]
+  "shared_files": [".env.keys", "service-account.json", "config/local.yaml"]
 }
 ```
 
-Files that don't exist are skipped with a warning. Files already present in the worktree (e.g., tracked by git) are not overwritten.
+Files that don't exist are skipped with a warning. Files already present in the worktree (e.g., tracked by git) are not overwritten. Symlinked files are automatically added to the worktree's `.gitignore`.
 
 ### Post-Create Hooks
 

@@ -253,20 +253,59 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
     }
   }
 
-  // Copy shared files into worktree from pre-adopt snapshots.
-  // Path traversal entries were already filtered during snapshot capture.
-  const copiedFiles: string[] = [];
+  // Symlink shared files from main repo into worktree.
+  const linkedFiles: string[] = [];
   for (const file of config.shared_files) {
+    const source = resolve(topLevel, file);
+    if (!source.startsWith(topLevel + "/")) {
+            console.warn(`Warning: shared_files entry '${file}' escapes repo root, skipping.`);
+      continue;
+    }
     const target = resolve(worktreeAbs, file);
-    if (existsSync(target)) continue; // already present from adopt or git
-    const content = sharedFileSnapshots.get(file);
-    if (!content) {
+    if (!existsSync(source)) {
       console.warn(`Warning: shared_files entry '${file}' not found in repo, skipping.`);
       continue;
     }
+    if (existsSync(target)) {
+      if (lstatSync(target).isSymbolicLink()) continue; // already symlinked
+      // Only replace untracked files (e.g., from adopt stash-pop).
+      // Git-tracked files keep their worktree version.
+      try {
+        git.gitInDir(worktreeAbs, "ls-files", "--error-unmatch", file);
+        continue; // tracked by git — don't replace
+      } catch { /* untracked — safe to replace */ }
+      unlinkSync(target);
+    }
     mkdirSync(dirname(target), { recursive: true });
-    writeFileSync(target, content);
-    copiedFiles.push(file);
+    symlinkSync(source, target);
+    linkedFiles.push(file);
+  }
+
+  // Prevent shared_files symlinks from being staged
+  if (linkedFiles.length > 0) {
+    const gitignorePath = join(worktreeAbs, ".gitignore");
+    const markerStart = "# git-stint shared_files (auto-generated, do not commit)";
+    const markerEnd = "# end git-stint shared_files";
+    let giContent = existsSync(gitignorePath) ? readFileSync(gitignorePath, "utf-8") : "";
+    const entries = linkedFiles.join("\n");
+    const block = `${markerStart}\n${entries}\n${markerEnd}`;
+
+    if (giContent.includes(markerStart)) {
+      const regex = new RegExp(
+        `${markerStart.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[\\s\\S]*?` +
+        `(?:${markerEnd.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}|$)`,
+      );
+      giContent = giContent.replace(regex, block);
+    } else {
+      giContent = giContent.endsWith("\n") ? giContent + "\n" + block + "\n" : giContent + "\n\n" + block + "\n";
+    }
+    writeFileSync(gitignorePath, giContent);
+
+    for (const f of linkedFiles) {
+      try {
+        git.gitInDir(worktreeAbs, "rm", "--cached", "--ignore-unmatch", f);
+      } catch { /* best effort */ }
+    }
   }
 
   // Run post_create hooks in the new worktree
@@ -309,10 +348,10 @@ export function start(name?: string, clientId?: string, adoptOverride?: boolean)
     }
   }
 
-  if (copiedFiles.length > 0) {
-    console.log(`\nShared files (copied into worktree):`);
-    for (const f of copiedFiles) {
-      console.log(`  ${f}`);
+  if (linkedFiles.length > 0) {
+    console.log(`\nShared files (symlinked from main repo):`);
+    for (const f of linkedFiles) {
+      console.log(`  ${f} \u2192 ${resolve(topLevel, f)}`);
     }
   }
 
@@ -819,6 +858,15 @@ function cleanup(manifest: SessionManifest, force = false): void {
           unlinkSync(target);
         } else {
           console.warn(`Warning: '${dir}' in worktree is a real directory (not a symlink). Data will be lost on cleanup.`);
+        }
+      } catch { /* best effort */ }
+    }
+    for (const file of config.shared_files) {
+      const target = resolve(worktree, file);
+      if (!existsSync(target)) continue;
+      try {
+        if (lstatSync(target).isSymbolicLink()) {
+          unlinkSync(target);
         }
       } catch { /* best effort */ }
     }

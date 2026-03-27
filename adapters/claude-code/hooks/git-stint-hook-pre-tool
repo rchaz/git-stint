@@ -94,6 +94,8 @@ if [ -f "$STINT_CONFIG" ]; then
 fi
 
 # The file is NOT in a stint worktree. Check if any stint session exists.
+SOLE_SESSION=""
+SESSION_COUNT=0
 SESSIONS_DIR="$(git rev-parse --git-common-dir 2>/dev/null)/sessions"
 if [ -d "$SESSIONS_DIR" ]; then
   MY_WORKTREE=""
@@ -134,7 +136,22 @@ if [ -d "$SESSIONS_DIR" ]; then
   fi
 
   # No session matches our clientId, but other sessions exist.
-  # Don't hijack them — fall through to create our own session.
+  # With "block" policy: auto-resume the sole session (common case: Claude Code
+  # restarted with a new PID). With multiple sessions, still auto-create.
+  if [ -n "$OTHER_SESSIONS" ]; then
+    SOLE_SESSION=""
+    SESSION_COUNT=0
+    for manifest in "$SESSIONS_DIR"/*.json; do
+      [ -f "$manifest" ] || continue
+      case "$manifest" in *.tmp) continue ;; esac
+      SESSION_COUNT=$((SESSION_COUNT + 1))
+      if command -v jq &>/dev/null; then
+        SOLE_SESSION=$(jq -r '.name // empty' "$manifest" 2>/dev/null || true)
+      else
+        SOLE_SESSION=$(grep -o '"name"[[:space:]]*:[[:space:]]*"[^"]*"' "$manifest" | head -1 | sed 's/.*"name"[[:space:]]*:[[:space:]]*"//;s/"$//')
+      fi
+    done
+  fi
 fi
 
 # No session for this client — check main_branch_policy before auto-creating.
@@ -151,13 +168,39 @@ if [ "$MAIN_BRANCH_POLICY" = "prompt" ]; then
     exit 0
   fi
   echo "BLOCKED: Writing to main branch." >&2
+  if [ -n "$SOLE_SESSION" ] && [ "$SESSION_COUNT" -eq 1 ] 2>/dev/null; then
+    echo "Active session found: $SOLE_SESSION" >&2
+    echo "To resume: git stint resume $SOLE_SESSION" >&2
+  fi
   echo "To allow, run: git stint allow-main --client-id $CLIENT_ID" >&2
   echo "To create a session instead, run: git stint start <descriptive-name>" >&2
   echo "  (pick a short name that describes your task, e.g. fix-auth-refresh, add-user-search)" >&2
   exit 2
 fi
 
-# Policy is "block" (or default) — auto-start a session, then block so agent retries in worktree.
+# Policy is "block" — auto-resume if exactly one session exists, otherwise auto-create.
+if [ -n "$SOLE_SESSION" ] && [ "$SESSION_COUNT" -eq 1 ] 2>/dev/null; then
+  # One session exists from a previous client — auto-resume it
+  RESUME_OUTPUT=$(git-stint resume "$SOLE_SESSION" --client-id "$CLIENT_ID" 2>&1) || {
+    # Resume failed — fall through to auto-create
+    SOLE_SESSION=""
+  }
+fi
+
+if [ -n "$SOLE_SESSION" ] && [ "$SESSION_COUNT" -eq 1 ] 2>/dev/null; then
+  # Resume succeeded — extract worktree and redirect
+  WORKTREE_PATH=$(echo "$RESUME_OUTPUT" | grep -o 'Worktree:.*' | sed 's/Worktree:[[:space:]]*//')
+  if [ -z "$WORKTREE_PATH" ]; then
+    WORKTREE_PATH="$REPO_ROOT/.stint/$SOLE_SESSION"
+  fi
+  echo "git-stint: Resumed session '${SOLE_SESSION}' (new client: ${CLIENT_ID})." >&2
+  echo "All edits must target the worktree: $WORKTREE_PATH" >&2
+  echo "Rewrite your file path from: $FILE_PATH" >&2
+  echo "To: ${WORKTREE_PATH}/${FILE_PATH#$REPO_ROOT/}" >&2
+  exit 2
+fi
+
+# No session to resume (0 or 2+ sessions) — auto-create a new one.
 SESSION_NAME="session-$(date +%Y%m%d-%H%M%S)"
 CLIENT_FLAG=""
 if [ -n "$CLIENT_ID" ]; then

@@ -119,6 +119,10 @@ The name becomes the branch (\`stint/<name>\`) and the PR title context.
 ## Session Lifecycle
 
 - If the hook blocks a write, create a session: \`git stint start <descriptive-name>\`
+- **Resuming**: If a session already exists from a previous conversation, resume it
+  instead of creating a new one: \`git stint resume <session-name>\`
+  Use \`git stint list\` to see active sessions. With \`block\` policy, the hook
+  auto-resumes when exactly one session exists.
 - Any uncommitted files on main are automatically carried into the new session.
   Do NOT redo work that was already written — it is adopted into the worktree.
 - All edits redirect to \`.stint/<session>/\` worktree.
