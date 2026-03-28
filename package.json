@@ -50,7 +50,7 @@
   "author": "Rahul Chandrasekaran",
   "license": "MIT",
   "devDependencies": {
-    "typescript": "^5.7.0",
+    "typescript": "^6.0.2",
     "@types/node": "^25.3.5"
   }
 }
