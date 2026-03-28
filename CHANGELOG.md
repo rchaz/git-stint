@@ -7,9 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-03-27
+
 ### Added
+- **`shared_files` config** — copy individual files from the main repo into worktrees on session start, with path traversal protection
+- **`post_create` hooks** — run shell commands in new worktrees after session creation for custom setup (e.g., `npm install`, environment config)
+- **`resume` command** — rebind to an existing session's worktree without restarting it, useful for recovering from disconnects or switching terminals
 - **`which` command** — print the resolved session name or worktree path (`--worktree`)
 - **PPID-based session resolution** — when multiple sessions exist, `resolveSession()` matches the caller's PPID against each session's `clientId` before throwing "Multiple active sessions"
+- **Hook auto-resume** — PreToolUse hook automatically resumes detached sessions
 
 ## [0.3.0] - 2026-02-28
 
